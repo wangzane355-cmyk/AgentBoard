@@ -49,6 +49,22 @@ class BoardTests(unittest.TestCase):
         self.assertEqual(self.board.initial_state()["projects"], [])
         self.assertEqual(self.board.initial_state()["chats"], [])
 
+    def test_http_page_works_without_console_error_stream(self):
+        from urllib.request import urlopen
+        server = self.board.ThreadingHTTPServer(("127.0.0.1", 0), self.board.Handler)
+        thread = self.board.threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with patch.object(self.board.sys, "stderr", None):
+                for path in ("/", "/static/appearance.js"):
+                    with urlopen(f"http://127.0.0.1:{server.server_port}{path}", timeout=3) as response:
+                        self.assertEqual(response.status, 200)
+                        self.assertTrue(response.read())
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
     def test_board_runtime_data_is_not_copied_as_project_source(self):
         runtime = self.source / "private-runtime"
         runtime.mkdir()

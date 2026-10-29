@@ -118,7 +118,7 @@ Acceptance rules support `exists:path`, `absent:path` and `contains:path | text`
 ## Development
 
 ```bash
-python -m unittest -v test_server.py test_context_sources.py test_group_chat.py test_agent_registry.py
+python -m unittest -v test_server.py test_context_sources.py test_group_chat.py test_agent_registry.py test_launch.py
 node --check static/agents.js
 node --check static/i18n.js
 node --check static/app.js

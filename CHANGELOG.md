@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 — 2026-10-29
+
+- Fixed empty HTTP responses from Windows desktop shortcuts using pythonw.exe without console streams. Windowless launcher diagnostics are saved locally, and reopening checks page readiness rather than only an occupied port.
+
 ## 0.2.1 — 2026-10-29
 
 - Added local appearance preferences under Settings: Graphite, Construct and Obsidian, with original previews, instant switching and restore-default support. No executor or project behavior changes.

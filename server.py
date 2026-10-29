@@ -1284,7 +1284,8 @@ def stop_chat(chat_id: str) -> dict:
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args) -> None:
-        if not self.path.startswith("/api/state"):
+        # pythonw.exe has no console streams. Logging must never abort a response.
+        if sys.stderr is not None and not self.path.startswith("/api/state"):
             super().log_message(fmt, *args)
 
     def response(self, code: int, data: dict) -> None:

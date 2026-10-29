@@ -74,7 +74,7 @@ Python可以检查进程、文件变化、保护文件、原项目并发改动�
 ## 开发与许可
 
 ```bash
-python -m unittest -v test_server.py test_context_sources.py test_group_chat.py test_agent_registry.py
+python -m unittest -v test_server.py test_context_sources.py test_group_chat.py test_agent_registry.py test_launch.py
 ```
 
 离线测试不会调用模型；真实模型试跑脚本需要单独手动运行。详见[贡献指南](CONTRIBUTING.md)。
