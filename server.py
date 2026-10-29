@@ -60,16 +60,17 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 
-def skip_directory(path: Path) -> bool:
-    return path.name in SKIP_DIRS or path.is_symlink() or path.resolve() in (DATA, WORKSPACES)
+def skip_directory(path: Path, runtime_roots: tuple[Path, Path]) -> bool:
+    return path.name in SKIP_DIRS or path.is_symlink() or path.resolve() in runtime_roots
 
 
 def inventory(root: Path) -> dict[str, str]:
     if not root.exists():
         return {}
+    runtime_roots = (DATA.resolve(), WORKSPACES.resolve())
     result: dict[str, str] = {}
     for directory, dirs, files in os.walk(root, followlinks=False):
-        dirs[:] = [name for name in dirs if not skip_directory(Path(directory) / name)]
+        dirs[:] = [name for name in dirs if not skip_directory(Path(directory) / name, runtime_roots)]
         for name in files:
             path = Path(directory) / name
             if path.is_symlink():
@@ -325,9 +326,10 @@ def copy_source(project: dict, workspace: Path, task: dict | None = None) -> dic
         raise RuntimeError("项目目录不存在")
     if workspace.exists():
         raise RuntimeError("隔离工作区已存在")
+    runtime_roots = (DATA.resolve(), WORKSPACES.resolve())
     total = 0
     for directory, dirs, files in os.walk(source, followlinks=False):
-        dirs[:] = [n for n in dirs if not skip_directory(Path(directory) / n)]
+        dirs[:] = [n for n in dirs if not skip_directory(Path(directory) / n, runtime_roots)]
         for name in files:
             path = Path(directory) / name
             if not path.is_symlink():
@@ -336,7 +338,7 @@ def copy_source(project: dict, workspace: Path, task: dict | None = None) -> dic
                     raise RuntimeError("项目可复制文件超过 2GB；请缩小项目目录")
 
     def ignore(directory: str, names: list[str]) -> set[str]:
-        return {n for n in names if skip_directory(Path(directory) / n)}
+        return {n for n in names if skip_directory(Path(directory) / n, runtime_roots)}
 
     shutil.copytree(source, workspace, ignore=ignore)
     context = workspace / "_agentboard_context"

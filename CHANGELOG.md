@@ -7,7 +7,7 @@
 - API keys referenced through environment variable names, never stored as values. Configuration checks do not call models or claim live authentication success.
 - Simulators work without accounts, keep saved simulation labels and cannot implement changes. API adapters support discussion and read-only investigation only.
 - Existing Python scope checks apply to CLI adapters; running agent configurations cannot be edited. Live third-party provider/account behavior remains unverified.
-- AgentBoard runtime data and worker roots are excluded from project copies and source hashes, including when developing AgentBoard itself.
+- AgentBoard runtime data and worker roots are excluded from project copies and source hashes, including when developing AgentBoard itself. Both paths are normalized to handle Windows temporary-folder aliases.
 - Offline adapter tests use local subprocesses and a loopback fake provider, including directed routing, persisted simulation records, capability checks and credential/error redaction.
 
 ## 0.1.1 — 2026-10-28
