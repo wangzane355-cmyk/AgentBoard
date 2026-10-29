@@ -7,13 +7,15 @@ AgentBoard 是一个本地运行的 Codex / DeepSeek 任务看板。两种 Agent
 
 ## 界面预览
 
-| 任务看板 · 窄屏视图 | Agent共享群聊 · 窄屏视图 |
-| --- | --- |
-| <img src="docs/assets/board.jpg" alt="任务看板" width="300"> | <img src="docs/assets/group-chat.jpg" alt="Agent共享群聊" width="300"> |
+![任务看板（英文模式）](docs/assets/board.jpg)
+
+![共享群聊（英文模式）](docs/assets/group-chat.jpg)
 
 以上来自内置只读演示，任务与对话均为明确标注的示例数据，不代表真实模型执行记录。
 
 ## 主要功能
+
+页面顶部和弹窗内可切换中文 / English，浏览器会记住选择。切换不会清空草稿，也不会翻译项目名称、任务正文、聊天原文或日志，不产生翻译模型用量。
 
 | 环节 | 可以做什么 |
 | --- | --- |
@@ -60,6 +62,8 @@ python demo.py
 ## 自动检查的边界
 
 这是早期版本，主要在Windows上手动验证。Linux/macOS的真实执行器链路尚未完整验证。
+
+目前内置 Codex 和 DeepSeek Harness，尚未提供“添加任意Agent”的设置页面。扩展其他Agent需要适配执行命令、群聊路由和结果收集，并保留时限、文件范围和人工查收规则。
 
 Python可以检查进程、文件变化、保护文件、原项目并发改动以及配置的规则。没有编译或测试证据时会标出空缺，画面、手感和需求取舍仍由人判断。隔离副本与事后检查不等于操作系统权限隔离。
 

@@ -20,5 +20,6 @@ jobs:
           node-version: '22'
       - run: python -m unittest -v test_server.py test_context_sources.py test_group_chat.py
       - run: node --check static/app.js
+      - run: node --check static/i18n.js
       - run: node --check static/chat.js
       - run: node --check static/context.js

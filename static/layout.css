@@ -30,3 +30,7 @@
 @media(max-height:800px){#chat-context-note{display:none}.chat-messages{min-height:85px;margin:8px 0}.chat-dialog #chat-input{min-height:54px;height:54px}.chat-reference-actions{margin:5px 0}.chat-focus-panel{padding:7px 9px}}
 @media(max-width:720px){.chat-focus-panel{flex-wrap:wrap;gap:5px;padding:7px}.chat-focus-panel button{padding:5px 8px}}
 @media(max-width:720px){.chat-reference-actions{margin:5px 0}.chat-dialog{height:calc(100dvh - 20px)}.chat-messages{min-height:90px}.chat-main>.hint{font-size:10px}.chat-compose-actions{flex-wrap:wrap}}
+
+.language-control{display:flex;align-items:center;gap:6px;margin:0;font-size:12px;white-space:nowrap}.language-control select{width:auto;min-width:104px;padding:8px 10px;margin:0}
+
+.dialog-head{gap:10px;flex-wrap:wrap}.dialog-head>.language-control{margin-left:auto}@media(max-width:520px){.dialog-head .language-control>span{display:none}.dialog-head .language-control select{min-width:88px;padding:6px}}

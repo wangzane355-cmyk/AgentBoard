@@ -24,14 +24,19 @@ AgentBoard connects the discussion and delivery stages of a local project. Codex
 
 ## See it in action
 
-| Project board · compact view | Shared agent room · compact view |
-| --- | --- |
-| <img src="docs/assets/board.jpg" alt="AgentBoard task board" width="300"> | <img src="docs/assets/group-chat.jpg" alt="AgentBoard shared agent room" width="300"> |
+### Project board
+
+![AgentBoard task board in English](docs/assets/board.jpg)
+
+### Shared agent room
+
+![AgentBoard shared agent room in English](docs/assets/group-chat.jpg)
 
 *Screenshots use the built-in, read-only demo workspace. Cards and conversations are illustrative sample data, not reports of real agent execution.*
 
 ## What you can do
 
+- **Use Chinese or English.** Switch the interface language in the header or an open dialog. Your browser remembers the choice; project data and conversation text keep their original language.
 - **Coordinate two executors.** Pick Codex or DeepSeek for a task. The default task limit is 25 minutes.
 - **Plan together.** Use a shared room, direct an individual agent, or allow a bounded discussion.
 - **Carry project context forward.** Attach local logs, documentation folders or webpages; refresh their snapshots before a turn.
@@ -108,11 +113,13 @@ Acceptance rules support `exists:path`, `absent:path` and `contains:path | text`
 - File deletion is not automatically integrated. Rollback refuses to overwrite subsequent edits.
 - Codex quota protection currently expects ChatGPT-authenticated CLI quota information. API-key-only setups may not expose that window and will be blocked by this guard.
 - CLI versions, authentication and sandbox capabilities can affect live execution. The app does not install executors or manage your account credentials.
+- Executor support currently includes Codex and DeepSeek Harness. Adding another agent requires a code adapter for task execution, chat routing and result collection; there is no custom-agent setup screen yet.
 
 ## Development
 
 ```bash
 python -m unittest -v test_server.py test_context_sources.py test_group_chat.py
+node --check static/i18n.js
 node --check static/app.js
 node --check static/chat.js
 node --check static/context.js

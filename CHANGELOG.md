@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1 — 2026-10-28
+
+- Chinese / English interface switch in the page header and modal dialogs, with browser-local preference persistence.
+- Local translation catalog for controls, forms, task states and conversation status; no translation API or model calls.
+- Switching languages preserves open forms, user drafts, task names, project paths and conversation text. Reference bodies, delivery output and diagnostic logs keep their original language.
+- Automatically generated planning and consensus requests follow the selected interface language.
+
 ## 0.1.0 — 2026-10-28
 
 First public source release.

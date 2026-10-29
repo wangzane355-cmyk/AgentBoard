@@ -123,8 +123,8 @@ $('#chat-task').onchange=async()=>{
 $('#chat-start-plan').onclick=()=>{
   const input=$('#chat-input');
   const task=state.tasks.find(t=>t.id===$('#chat-task').value);
-  const request=task?'请先根据这张任务、最新开发日志及前置依赖，帮我梳理它要解决什么、现在做到哪里、有哪些做法；先给建议和理由，未确定的地方给我两三个容易理解的选择。':'我想先商量下一步。请先查看已带入的项目日志、任务详情、依赖和运行记录，告诉我当前进展，并推荐现在最适合讨论的一张任务及理由。不要把待处理任务当成已完成，也不要推进标明暂停或待定的事项；只在确实需要我选择时问一个关键问题。';
-  input.value=(input.value.trim()?input.value.trim()+'\n\n':'')+request;
+  const chineseRequest=task?'请先根据这张任务、最新开发日志及前置依赖，帮我梳理它要解决什么、现在做到哪里、有哪些做法；先给建议和理由，未确定的地方给我两三个容易理解的选择。':'我想先商量下一步。请先查看已带入的项目日志、任务详情、依赖和运行记录，告诉我当前进展，并推荐现在最适合讨论的一张任务及理由。不要把待处理任务当成已完成，也不要推进标明暂停或待定的事项；只在确实需要我选择时问一个关键问题。';
+  input.value=(input.value.trim()?input.value.trim()+'\n\n':'')+AgentBoardI18n.choose(chineseRequest,task?'Based on this task, the latest development logs and its dependencies, clarify the problem, current progress and possible approaches. Give recommendations and reasons first, with two or three clear choices for unresolved decisions.':'Read the included project logs, task details, dependencies and execution records. Summarize progress and recommend the next task to discuss with reasons. Do not treat pending tasks as complete or advance paused or undecided work. Ask one key question only if a decision is needed.');
   $('#chat-form').requestSubmit();
 };
 $('#new-chat').onclick=()=>{
@@ -157,12 +157,12 @@ $('#chat-stop').onclick=async()=>{try{await api(`/api/chats/${currentChat}/stop`
 $('#chat-discuss').onclick=()=>{
   const input=$('#chat-input');
   if(/^\/(codex|deepseek|ds)(\s|$)/i.test(input.value.trim()))return toast('这是一条定向消息，请直接发送；需要群聊讨论时再使用 /讨论。');
-  input.value=`/讨论 ${$('#group-rounds').value} ${input.value.trim()||'请围绕当前方案互相审查，明确分歧与下一步建议，不要执行开发。'}`;
+  input.value=`${AgentBoardI18n.choose('/讨论','/discuss')} ${$('#group-rounds').value} ${input.value.trim()||AgentBoardI18n.choose('请围绕当前方案互相审查，明确分歧与下一步建议，不要执行开发。','Review the current plan together, identify disagreements and recommend next steps. Do not implement changes.')}`;
   $('#chat-form').requestSubmit();
 };
 $('#chat-organize').onclick=()=>{
   const input=$('#chat-input');
-  input.value=(input.value.trim()?input.value.trim()+'\n\n':'')+'请结合关联任务、最新开发日志和我们的讨论，整理当前共识：目标、已选方案、修改范围、验收条件、尚待决定的问题和下一步。区分已确定与未确定内容，先不要执行。';
+  input.value=(input.value.trim()?input.value.trim()+'\n\n':'')+AgentBoardI18n.choose('请结合关联任务、最新开发日志和我们的讨论，整理当前共识：目标、已选方案、修改范围、验收条件、尚待决定的问题和下一步。区分已确定与未确定内容，先不要执行。','Using the linked task, latest development logs and our discussion, summarize the current consensus: goal, chosen approach, allowed scope, acceptance criteria, open decisions and next steps. Distinguish agreed points from unresolved ones. Do not execute yet.');
   $('#chat-form').requestSubmit();
 };
 $('#chat-consensus').onclick=()=>{

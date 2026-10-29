@@ -7,6 +7,7 @@ Contributions that make local agent coordination clearer, easier to verify and l
 ```bash
 python demo.py
 python -m unittest -v test_server.py test_context_sources.py test_group_chat.py
+node --check static/i18n.js
 node --check static/app.js
 node --check static/chat.js
 node --check static/context.js
@@ -34,3 +35,7 @@ Never include `data/`, real chat transcripts, worker source copies, account cred
 - Live smoke scripts are separate from offline tests because they can incur usage.
 
 Read [DEEPSEEK_HANDOFF.md](DEEPSEEK_HANDOFF.md) for local task/API collaboration and [SECURITY.md](SECURITY.md) for security boundaries.
+
+## Interface languages
+
+The local UI catalog is in `static/i18n.js`. Keep translations limited to interface text. Project names, paths, task bodies, chat messages and result/log content must preserve their original text. Verify switching both ways in an open form and after an automatic refresh. Language changes must not submit a form or invoke an executor.

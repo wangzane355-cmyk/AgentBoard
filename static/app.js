@@ -21,7 +21,7 @@ async function api(path, body) {
   return data;
 }
 function toast(message) {
-  const el = $('#toast'); el.textContent = message; el.classList.remove('hidden');
+  const el = $('#toast'); el.textContent = AgentBoardI18n.translate(message); el.classList.remove('hidden');
   clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.add('hidden'), 4200);
 }
 function elapsed(iso) {
@@ -35,7 +35,7 @@ function render() {
   if (activeProject && !state.projects.some(p=>p.id===activeProject)) activeProject = state.projects[0]?.id || null;
   const project = state.projects.find(p=>p.id===activeProject);
   $('#project-nav').innerHTML = state.projects.map(p=>`<button class="project-link ${p.id===activeProject?'active':''}" data-project="${esc(p.id)}">${esc(p.name)}</button>`).join('') || '<div class="tiny">暂无项目</div>';
-  $('#project-title').textContent = project?.name || '任务看板';
+  $('#project-title').textContent = project?.name || AgentBoardI18n.translate('任务看板');
   $('#project-subtitle').textContent = project ? '用任务卡调度 Codex 和 DeepSeek；Python 负责监督。' : '先添加一个本地项目。';
   $('#agent-status').innerHTML = `<span class="mini-badge ${state.agents.codex?'ok':''}">Codex ${state.agents.codex?'可用':'未找到'}</span><span class="mini-badge ${state.agents.deepseek?'ok':''}">DeepSeek ${state.agents.deepseek?'可用':'未找到'}</span>`;
   const budget=state.budget||{}, age=budget.observed_at?Date.now()-Date.parse(budget.observed_at):Infinity;
@@ -111,8 +111,8 @@ async function act(id,action) {
   const t=state.tasks.find(x=>x.id===id);
   if (action==='edit') {openTaskForm(t);return;}
   if (action==='discuss') {closeDrawer();showChat(t.id);return;}
-  if (action==='accept' && t?.mode==='implement' && !confirm('接入原项目会复制本次改动。请先查看结果；确认接入吗？')) return;
-  if (action==='rollback' && !confirm('确认撤回本次接入的文件改动？若文件已被再次修改，系统会拒绝撤回。')) return;
+  if (action==='accept' && t?.mode==='implement' && !confirm(AgentBoardI18n.translate('接入原项目会复制本次改动。请先查看结果；确认接入吗？'))) return;
+  if (action==='rollback' && !confirm(AgentBoardI18n.translate('确认撤回本次接入的文件改动？若文件已被再次修改，系统会拒绝撤回。'))) return;
   const body=action==='answer'?{answer:$('#decision-answer')?.value||''}:{};
   try {await api(`/api/tasks/${id}/${action}`,body);toast(action==='start'?'任务已启动':action==='stop'?'已请求停止':action==='rollback'?'已撤回改动':action==='answer'?'决定已提交，任务继续':'任务已完成');await refresh();} catch(e){toast(e.message);}
 }
