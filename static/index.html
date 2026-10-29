@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgentBoard · 本地任务调度</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/mobile.css">
+  <link rel="stylesheet" href="/static/layout.css">
+  <link rel="stylesheet" href="/static/chat.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">◈</span><div><strong>AgentBoard</strong><small>本地任务调度</small></div></div>
+      <div class="side-label">工作空间</div>
+      <nav id="project-nav" class="project-nav"></nav>
+      <button id="add-project" class="side-action">＋ 添加项目</button>
+      <button id="open-chat" class="side-action">◌ 与 Agent 对话</button>
+      <button id="open-group-chat" class="side-action">◎ Agent 群聊</button>
+      <div class="sidebar-bottom">
+        <div class="connection"><span class="pulse"></span> Python 看门脚本运行中</div>
+        <div id="agent-status" class="agent-status"></div>
+        <div class="tiny">运行和文件检查由 Python 完成。所有任务在隔离副本执行。</div>
+      </div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><div class="eyebrow">PROJECT BOARD</div><h1 id="project-title">任务看板</h1><p id="project-subtitle">一句临时想法也可以直接建卡。</p></div>
+        <div class="top-actions"><button id="budget-button" class="ghost" title="点击自动刷新用量">Codex 5h：读取中</button><button id="plan-next" class="soft">商量下一步</button><button id="project-context" class="ghost">项目资料</button><button id="refresh" class="ghost">刷新</button><button id="new-task" class="primary">＋ 新任务</button></div>
+      </header>
+      <section class="overview">
+        <div class="overview-item"><span>运行中</span><strong id="metric-running">0</strong></div>
+        <div class="overview-item"><span>待你处理</span><strong id="metric-review">0</strong></div>
+        <div class="overview-item"><span>已完成</span><strong id="metric-done">0</strong></div>
+        <div class="overview-note">Codex / DeepSeek 可按任务自由选择。默认不自动调用 Codex。</div>
+      </section>
+      <section id="board" class="board" aria-label="任务看板"></section>
+    </main>
+  </div>
+
+  <div id="shade" class="shade hidden"></div>
+  <aside id="drawer" class="drawer hidden" aria-label="任务详情">
+    <div class="drawer-head"><span class="eyebrow">TASK DETAILS</span><button id="close-drawer" class="icon-btn" aria-label="关闭">×</button></div>
+    <div id="drawer-body"></div>
+  </aside>
+
+  <dialog id="task-dialog" class="dialog">
+    <form id="task-form" method="dialog">
+      <input type="hidden" name="discussion_id">
+      <div class="dialog-head"><div><span class="eyebrow">TASK CARD</span><h2 id="task-dialog-title">创建任务卡</h2></div><button type="button" class="icon-btn close-dialog">×</button></div>
+      <label>任务名称<input name="title" maxlength="120" required placeholder="例如：训练界面太乱，先调查原因"></label>
+      <label>你想达到什么效果<textarea name="description" rows="5" required placeholder="用自己的话写就行；不确定怎么做也没关系。"></textarea></label>
+      <div class="form-grid">
+        <label>项目<select name="project_id" id="task-project"></select></label>
+        <label>交给谁<select name="agent"><option value="deepseek">DeepSeek</option><option value="codex">Codex</option></select></label>
+        <label>任务方式<select name="mode"><option value="explore">先调查，不改文件</option><option value="implement">开发，修改隔离副本</option></select></label>
+        <label>最多运行几分钟<input name="limit_minutes" type="number" min="1" max="240" value="25"></label>
+      </div>
+      <label>允许修改的相对路径 <span class="hint">开发任务必填，一行一个；如 Assets/Scripts/UI/**</span><textarea name="allowed_paths" rows="3" placeholder="Assets/Scripts/UI/**"></textarea></label>
+      <label>Python 验收规则 <span class="hint">可留空，一行一条；exists:路径 / absent:路径 / contains:路径 | 文字</span><textarea name="assertions" rows="3" placeholder="exists:Assets/Scripts/UI/TrainingPanel.cs"></textarea></label>
+      <details class="detail-section"><summary>任务补充资料（自动继承项目资料，可留空）</summary><label>额外的本地文件或文件夹<textarea name="context_files" rows="3" placeholder="一行一个绝对路径，例如 D:\项目\Docs\开发日志.md"></textarea></label><label>额外的网址<textarea name="context_urls" rows="2" placeholder="一行一个 http/https 网址"></textarea></label></details>
+      <label>前置任务 ID <span class="hint">可留空，多个用逗号分隔</span><input name="depends_on" placeholder="例如 abc123, def456"></label>
+      <label class="checkline"><input name="auto_start" type="checkbox"> 前置任务完成后自动开始这张卡</label>
+      <label class="checkline"><input name="fallback_to_deepseek" type="checkbox" checked> Codex 额度不足或读数过期时改派 DeepSeek</label>
+      <div class="dialog-foot"><button type="button" class="ghost close-dialog">取消</button><button id="task-submit" type="submit" class="primary">创建任务</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="project-dialog" class="dialog compact">
+    <form id="project-form" method="dialog">
+      <div class="dialog-head"><div><span class="eyebrow">NEW PROJECT</span><h2>添加本地项目</h2></div><button type="button" class="icon-btn close-dialog">×</button></div>
+      <label>项目名称<input name="name" required placeholder="例如：我的新游戏"></label>
+      <label>项目目录<input name="path" required placeholder="D:\Projects\MyGame"></label>
+      <label>需保护的目录 <span class="hint">一行一个，例如玩家存档目录</span><textarea name="protected_paths" rows="3"></textarea></label>
+      <label>自动检查<select name="check"><option value="none">仅检查文件与保护路径</option><option value="python_compile">编译 Python 文件</option><option value="unity_compile">Unity 隔离副本批处理编译</option></select></label>
+      <label>关联开发日志 / 本地资料<textarea name="context_files" rows="3" placeholder="文件或文件夹的绝对路径，一行一个"></textarea></label>
+      <label>关联网页<textarea name="context_urls" rows="2" placeholder="http/https 网址，一行一个"></textarea></label>
+      <div class="dialog-foot"><button type="button" class="ghost close-dialog">取消</button><button type="submit" class="primary">添加项目</button></div>
+    </form>
+  </dialog>
+  <dialog id="context-dialog" class="dialog">
+    <form id="context-form">
+      <div class="dialog-head"><div><span class="eyebrow">PROJECT REFERENCES</span><h2>项目资料关联</h2></div><button type="button" class="icon-btn close-dialog" aria-label="关闭项目资料">×</button></div>
+      <p id="context-project-title"></p><p class="hint">每次讨论和派工前重新读取。文件夹优先选取开发日志与交接资料；读取范围和截取情况会记录在快照中。</p>
+      <label>当前项目源文件夹<input id="context-project-path" readonly></label>
+      <label>关联日志、文件或文件夹<textarea name="context_files" id="context-local" rows="5" placeholder="例如 D:\我的项目\Docs\开发日志.md&#10;D:\我的项目\Docs"></textarea></label>
+      <div class="reference-actions"><button type="button" class="ghost" data-pick="file">选择日志文件</button><button type="button" class="ghost" data-pick="directory">选择资料文件夹</button></div>
+      <label>关联网页地址<textarea name="context_urls" rows="3" placeholder="http/https，一行一个。读取网页正文，不包含登录页面后的内容。"></textarea></label>
+      <p class="hint">支持 md/txt/json/yaml 等文本资料。每轮最多24个本地文件，共约4.8万字；长文件保留开头与末尾，网页保留开头。</p>
+      <button id="preview-context" type="button" class="soft">检查并预览读取内容</button>
+      <pre id="context-preview" class="result-box hidden" role="status"></pre>
+      <div class="dialog-foot"><button type="button" class="ghost close-dialog">取消</button><button id="save-context" type="submit" class="primary">保存关联</button></div>
+    </form>
+  </dialog>
+  <dialog id="consensus-dialog" class="dialog">
+    <form id="consensus-form"><div class="dialog-head"><h2>保存当前共识</h2><button type="button" class="icon-btn close-dialog" aria-label="关闭共识">×</button></div><p class="hint">确认目标、已选方案、待定问题及下一步。共识会随关联任务交给执行者。</p><textarea id="consensus-input" rows="12" maxlength="12000" aria-label="当前共识"></textarea><div class="dialog-foot"><button type="button" class="ghost close-dialog">取消</button><button type="submit" class="primary">保存共识</button></div></form>
+  </dialog>
+  <dialog id="chat-dialog" class="dialog chat-dialog">
+    <div class="dialog-head"><div><span class="eyebrow">AGENT CHAT</span><h2>与 Agent 对话</h2></div><button type="button" class="icon-btn close-dialog" aria-label="关闭对话">×</button></div>
+    <div class="chat-layout">
+      <aside class="chat-sidebar">
+      <details id="chat-settings" class="chat-settings" open>
+        <summary>会话与设置 <span>展开 / 收起</span></summary>
+        <div class="chat-settings-body">
+        <div class="chat-project-label"><span class="eyebrow">当前项目</span><strong id="chat-project-name"></strong></div>
+        <div class="chat-mode-controls"><label>聊天方式<select id="chat-mode" aria-label="聊天方式"><option value="single">单聊</option><option value="group">Agent 群聊</option></select></label><label>回复对象<select id="chat-agent" aria-label="对话执行者"><option value="all" hidden>发给全体</option><option value="deepseek">DeepSeek</option><option value="codex">Codex</option></select></label></div>
+        <div id="group-chat-help" class="group-chat-help hidden">成员：DeepSeek · Codex。普通消息全体回复；<code>/codex</code> 或 <code>/deepseek</code> 仅指定AI回复。所有消息在房间内共享。</div>
+        <div class="chat-focus-panel"><div><strong id="chat-focus-title"></strong><div class="hint">自动带入已关联日志、任务目标、依赖和进度，无需重新介绍。</div></div><button id="chat-start-plan" type="button" class="soft">帮我判断下一步</button></div>
+        <label class="chat-task-label">关联任务<select id="chat-task" aria-label="关联任务"></select></label>
+        <div class="chat-reference-actions"><button id="chat-organize" type="button" class="ghost">请 Agent 整理共识</button><button id="chat-consensus" type="button" class="ghost">查看 / 保存共识</button><span id="group-discussion-controls" class="group-discussion-controls hidden"><select id="group-rounds" aria-label="群聊讨论上限"><option value="1">最多1轮 / 2次回复</option><option value="2" selected>最多2轮 / 4次回复</option><option value="3">最多3轮 / 6次回复</option></select><button id="chat-discuss" type="button" class="soft">让他们讨论</button></span></div>
+        <div id="chat-reference-status" class="hint"></div>
+        <label id="chat-source-label" class="chat-source"><input id="chat-source" type="checkbox"> 附带项目源码快照（供只读查阅）</label>
+        <div id="chat-context-note" class="hint">默认携带项目名称和任务概况。历史记录自动保存；每轮携带最近最多约4.2万字。每轮最多25分钟。</div>
+        <button id="chat-to-task" class="soft" disabled>转成任务卡</button>
+        <div class="chat-history-head"><span class="eyebrow">历史对话</span><button id="new-chat" class="ghost">＋ 新对话</button></div>
+        <div id="chat-sessions"></div>
+        </div>
+      </details>
+      </aside>
+      <section class="chat-main">
+        <div class="chat-reading-head"><strong>聊天记录</strong><span>Codex / DeepSeek</span></div>
+        <div id="chat-messages" class="chat-messages" role="log" aria-label="对话记录"></div>
+        <div id="chat-status" class="chat-status" role="status"></div>
+        <form id="chat-form"><textarea id="chat-input" rows="3" maxlength="12000" placeholder="先聊想法、问问题，或一起整理下一张任务卡…" aria-label="发送给 Agent 的消息" required></textarea><div class="chat-compose-actions"><span class="hint">Ctrl / ⌘ + Enter 发送</span><button id="chat-stop" type="button" class="danger hidden">停止回复</button><button id="chat-send" type="submit" class="primary">发送</button></div></form>
+      </section>
+    </div>
+  </dialog>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/static/app.js"></script>
+  <script src="/static/chat.js"></script>
+  <script src="/static/context.js"></script>
+</body>
+</html>

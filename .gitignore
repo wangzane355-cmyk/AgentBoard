@@ -1,0 +1,22 @@
+# Private application state, conversations, logs and source snapshots
+/data/
+/AgentBoardWork/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+auth.json
+credentials.json
+*.pem
+*.key
+.dsh/
+.codex/
+node_modules/
+dist/
+*.zip
+*.lnk
+.DS_Store
+Thumbs.db
