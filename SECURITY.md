@@ -20,3 +20,5 @@ Codex and DeepSeek credentials are managed by their own tools. AgentBoard does n
 Use this repository's private vulnerability reporting option if GitHub exposes it. If unavailable, open a minimal issue requesting a private reporting channel without including credentials, private data or an exploit affecting another user's system.
 
 There is no guaranteed response-time or supported-version SLA at this early stage. Please include the affected commit, OS, a safe reproduction and the impact you observed.
+
+Custom executors are trusted local configuration, not sandboxed plugins. Keep `data/agents.json` private. API adapters read keys from the service environment; linked project context is sent only when a user starts a task or sends a message. Configuration checks do not contact providers. Bridge redirects are blocked, and provider error bodies are omitted from diagnostics.

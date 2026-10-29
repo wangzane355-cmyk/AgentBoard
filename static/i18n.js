@@ -2,6 +2,26 @@
 (() => {
   'use strict';
   const catalog = Object.fromEntries(String.raw`
+⚙ Agent 管理	⚙ Manage agents
+Agent 管理	Manage agents
+无需新账号即可添加本地模拟Agent。检查配置不调用模型，也不代表账号登录或服务连接成功。	Add a local simulator without an account. Configuration checks do not call models or verify authentication or provider connectivity.
+添加 / 编辑 Agent	Add / edit agent
+显示名称	Display name
+接入类型	Adapter type
+本地模拟（无需账号）	Local simulator (no account)
+命令行程序	Command-line executable
+兼容 Chat Completions API	Compatible Chat Completions API
+可执行程序	Executable
+参数 JSON 数组	Arguments as a JSON array
+提示词通过标准输入传入，纯文本结果从标准输出读取。参数可用 {workspace}、{answer_file}。程序在隔离副本运行；权限边界仍取决于执行器本身。	The prompt is sent on stdin; plain text replies are read from stdout. Arguments support {workspace} and {answer_file}. Runs in an isolated copy; permissions depend on the executor.
+允许该命令行Agent执行开发任务	Allow implementation tasks with this CLI
+完整接口地址	Full endpoint URL
+模型名称	Model name
+密钥环境变量名	API key environment variable name
+只填写变量名，不填写密钥。API模式仅支持讨论和只读调查；发送时会把关联项目上下文提交到你配置的服务，可能产生费用。	Enter the environment variable name, not the secret. API mode supports discussion and read-only investigation. Sending submits linked project context to the configured provider and may incur charges.
+启用Agent	Enable agent
+清空表单	Clear form
+保存Agent	Save agent
 本地任务调度	Local agent workspace
 工作空间	Workspaces
 ＋ 添加项目	＋ Add project
@@ -255,7 +275,7 @@ Agent 正在回复，关闭面板后仍会继续。	Agent is replying; closing t
     return result === undefined ? value : value.slice(0, value.indexOf(text)) + result + value.slice(value.indexOf(text) + text.length);
   }
   // Exclude all user-authored content, source paths, result bodies and logs.
-  const protectedContent = '#project-nav,#project-title,#chat-project-name,#context-project-title,.card-title,.card-description,.card-error,.detail-desc,#drawer-body>h2,.chat-session>strong,.chat-message>div:not(.chat-message-label),.result-box,textarea,input,pre,code,figcaption,.tag-list,.decision-panel p,.decision-options,#task-project option,#chat-task option:not([value=""])';
+  const protectedContent = '[data-agent-name],[data-agent-option],#agent-status,#chat-room-members label,#group-chat-help,#project-nav,#project-title,#chat-project-name,#context-project-title,.card-title,.card-description,.card-error,.detail-desc,#drawer-body>h2,.chat-session>strong,.chat-message>div:not(.chat-message-label),.result-box,textarea,input,pre,code,figcaption,.tag-list,.decision-panel p,.decision-options,#task-project option,#chat-task option:not([value=""])';
   const textSources = new WeakMap(), attributeSources = new WeakMap();
   function localizeText(node) {
     if (!node.parentElement || node.parentElement.closest(`script,style,${protectedContent}`)) return;

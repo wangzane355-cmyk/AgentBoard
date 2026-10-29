@@ -37,7 +37,7 @@ AgentBoard connects the discussion and delivery stages of a local project. Codex
 ## What you can do
 
 - **Use Chinese or English.** Switch the interface language in the header or an open dialog. Your browser remembers the choice; project data and conversation text keep their original language.
-- **Coordinate two executors.** Pick Codex or DeepSeek for a task. The default task limit is 25 minutes.
+- **Choose your executor.** Use Codex, DeepSeek or a configured custom adapter. Try a local simulator without an account. The default task limit is 25 minutes.
 - **Plan together.** Use a shared room, direct an individual agent, or allow a bounded discussion.
 - **Carry project context forward.** Attach local logs, documentation folders or webpages; refresh their snapshots before a turn.
 - **Keep discussions connected to work.** Save a consensus, create a task draft, or update an existing task.
@@ -113,12 +113,13 @@ Acceptance rules support `exists:path`, `absent:path` and `contains:path | text`
 - File deletion is not automatically integrated. Rollback refuses to overwrite subsequent edits.
 - Codex quota protection currently expects ChatGPT-authenticated CLI quota information. API-key-only setups may not expose that window and will be blocked by this guard.
 - CLI versions, authentication and sandbox capabilities can affect live execution. The app does not install executors or manage your account credentials.
-- Executor support currently includes Codex and DeepSeek Harness. Adding another agent requires a code adapter for task execution, chat routing and result collection; there is no custom-agent setup screen yet.
+- Built-in Codex and DeepSeek adapters can be extended through **Manage agents** with local simulators, stdin/stdout executors and compatible APIs. See [adding agents](docs/AGENTS.md) for supported contracts and verification limits.
 
 ## Development
 
 ```bash
-python -m unittest -v test_server.py test_context_sources.py test_group_chat.py
+python -m unittest -v test_server.py test_context_sources.py test_group_chat.py test_agent_registry.py
+node --check static/agents.js
 node --check static/i18n.js
 node --check static/app.js
 node --check static/chat.js

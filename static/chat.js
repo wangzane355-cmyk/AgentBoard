@@ -10,15 +10,17 @@ const chatCompactLayout=window.matchMedia('(max-width:760px)');
 function configureChatLayout(){ $('#chat-settings').open=!chatCompactLayout.matches; }
 chatCompactLayout.addEventListener('change',configureChatLayout);
 
-function agentName(agent){return agent==='codex'?'Codex':agent==='deepseek'?'DeepSeek':'Python监督';}
+function agentName(agent){return agent?profileName(agent):'Python监督';}
 function setChatMode(mode, agent=null){
   const group=mode==='group';
   $('#chat-mode').value=group?'group':'single';
+  if(typeof renderAgents==='function')renderAgents();
   $('#chat-agent').querySelector('option[value="all"]').hidden=!group;
   $('#chat-agent').value=group?(agent||'all'):(agent&&agent!=='all'?agent:'deepseek');
   $('#group-chat-help').classList.toggle('hidden',!group);
   $('#group-discussion-controls').classList.toggle('hidden',!group);
   $('#chat-agent').setAttribute('aria-label',group?'群聊回复对象':'对话执行者');
+  if(typeof renderRoomMembers==='function')renderRoomMembers();
   $('#chat-discuss').disabled=chatSending||chatData?.status==='running'||$('#chat-agent').value!=='all';
 }
 async function showChat(taskId='', mode='single') {
@@ -54,7 +56,7 @@ async function refreshChat() {
     const sessions = (state.chats||[]).filter(c=>c.project_id===chatProject).slice().reverse();
     const sessionSignature=JSON.stringify([chatProject,currentChat,sessions]);
     if(sessionSignature!==lastSessionSignature){
-      $('#chat-sessions').innerHTML = sessions.map(c=>`<button class="chat-session ${c.id===currentChat?'active':''}" data-chat="${esc(c.id)}"><strong>${esc(c.title)}</strong><small>${c.mode==='group'?'群聊 · DeepSeek / Codex':agentName(c.agent)} · ${c.status==='running'?'回复中':c.status==='error'?'需查看':'已保存'}</small></button>`).join('') || '<p class="hint">当前项目还没有对话</p>';
+      $('#chat-sessions').innerHTML = sessions.map(c=>`<button class="chat-session ${c.id===currentChat?'active':''}" data-chat="${esc(c.id)}"><strong>${esc(c.title)}</strong><small>${c.mode==='group'?esc((c.members||[]).map(agentName).join(' / ')):esc(agentName(c.agent))} · ${c.status==='running'?'回复中':c.status==='error'?'需查看':'已保存'}</small></button>`).join('') || '<p class="hint">当前项目还没有对话</p>';
       document.querySelectorAll('[data-chat]').forEach(b=>b.onclick=async()=>{
       if(chatSending)return;
       currentChat=b.dataset.chat; chatData=null; lastMessageSignature='';
@@ -75,10 +77,11 @@ async function refreshChat() {
     const signature=JSON.stringify(messages);
     if(signature!==lastMessageSignature || !$('#chat-messages').innerHTML){
       const box=$('#chat-messages'), nearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<90;
-      box.innerHTML=messages.map(m=>`<article class="chat-message ${m.role==='user'?'user':m.role==='system'?'system':'assistant'} ${m.agent==='codex'?'from-codex':m.agent==='deepseek'?'from-deepseek':''}"><div class="chat-message-label">${m.role==='user'?'你':m.role==='system'?'Python监督':agentName(m.agent)}${m.audience&&chatData?.mode==='group'?` <span class="chat-audience">→ ${m.directed?esc(m.audience.map(agentName).join('、')):'全体'}</span>`:''}${m.handoff_to?` <span class="chat-audience">请 ${esc(agentName(m.handoff_to))} 接话</span>`:''}</div><div>${esc(m.text)}</div></article>`).join('') || '<div class="chat-empty">先说说你的想法<br><small>群聊支持全体发言和斜杠定向消息</small></div>';
+      box.innerHTML=messages.map(m=>`<article class="chat-message ${m.role==='user'?'user':m.role==='system'?'system':'assistant'} ${m.agent==='codex'?'from-codex':m.agent==='deepseek'?'from-deepseek':''}"><div class="chat-message-label">${esc(m.role==='user'?'你':m.role==='system'?'Python监督':agentName(m.agent))}${m.audience&&chatData?.mode==='group'?` <span class="chat-audience">→ ${m.directed?esc(m.audience.map(agentName).join('、')):'全体'}</span>`:''}${m.simulation?' [SIMULATION]':''}${m.handoff_to?` <span class="chat-audience">请 ${esc(agentName(m.handoff_to))} 接话</span>`:''}</div><div>${esc(m.text)}</div></article>`).join('') || '<div class="chat-empty">先说说你的想法<br><small>群聊支持全体发言和斜杠定向消息</small></div>';
       if(nearBottom || lastMessageSignature==='')box.scrollTop=box.scrollHeight;
       lastMessageSignature=signature;
     }
+    renderRoomMembers();
     const running=chatData?.status==='running';
     if(chatData)$('#chat-task').value=chatData.task_id||'';
     $('#chat-task').disabled=running||chatSending;
@@ -144,7 +147,7 @@ $('#chat-form').onsubmit=async e=>{
   chatSending=true; $('#chat-send').disabled=true;
   try{
     if(!currentChat){
-      const created=await api('/api/chats',{project_id:chatProject,agent:$('#chat-agent').value==='all'?'deepseek':$('#chat-agent').value,mode:$('#chat-mode').value,include_source:$('#chat-source').checked,task_id:$('#chat-task').value});
+      const created=await api('/api/chats',{project_id:chatProject,agent:$('#chat-agent').value==='all'?'deepseek':$('#chat-agent').value,mode:$('#chat-mode').value,include_source:$('#chat-source').checked,task_id:$('#chat-task').value,members:selectedMembers()});
       currentChat=created.data.id;
     }
     await api(`/api/chats/${currentChat}/send`,{message:text,agent:$('#chat-agent').value});
@@ -156,7 +159,7 @@ $('#chat-input').onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.pre
 $('#chat-stop').onclick=async()=>{try{await api(`/api/chats/${currentChat}/stop`,{});await refreshChat();}catch(e){toast(e.message);}};
 $('#chat-discuss').onclick=()=>{
   const input=$('#chat-input');
-  if(/^\/(codex|deepseek|ds)(\s|$)/i.test(input.value.trim()))return toast('这是一条定向消息，请直接发送；需要群聊讨论时再使用 /讨论。');
+  if(new RegExp('^/('+profiles().map(p=>p.id).concat('ds').join('|')+')(\\s|$)','i').test(input.value.trim()))return toast('这是一条定向消息，请直接发送；需要群聊讨论时再使用 /讨论。');
   input.value=`${AgentBoardI18n.choose('/讨论','/discuss')} ${$('#group-rounds').value} ${input.value.trim()||AgentBoardI18n.choose('请围绕当前方案互相审查，明确分歧与下一步建议，不要执行开发。','Review the current plan together, identify disagreements and recommend next steps. Do not implement changes.')}`;
   $('#chat-form').requestSubmit();
 };

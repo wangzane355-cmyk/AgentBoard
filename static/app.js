@@ -53,12 +53,13 @@ function render() {
   document.querySelectorAll('[data-project]').forEach(b=>b.onclick=()=>{activeProject=b.dataset.project;activeTask=null;closeDrawer();render();});
   document.querySelectorAll('[data-task]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.task));
   if (activeTask) drawDrawer();
+  if(typeof renderAgents==='function')renderAgents();
 }
 function card(t) {
   const run = latestRun(t);
   const bottom = t.status==='running' ? `${elapsed(run?.started_at)} / ${t.limit_minutes}:00` : t.mode==='explore'?'先调查':'开发任务';
   const agent=run?.agent||t.agent;
-  return `<button class="card" data-task="${esc(t.id)}"><div class="card-top"><span>${esc(t.id.toUpperCase())}</span><span class="agent-chip ${agent}">${agent==='codex'?'Codex':'DeepSeek'}</span></div><div class="card-title">${esc(t.title)}</div><div class="card-description">${esc(t.description)}</div>${run?.error?`<div class="card-error">${esc(run.error)}</div>`:''}<div class="card-bottom"><span>${esc(statusText[t.status])}</span><span>${esc(bottom)}</span></div></button>`;
+  return `<button class="card" data-task="${esc(t.id)}"><div class="card-top"><span>${esc(t.id.toUpperCase())}</span><span class="agent-chip ${agent}">${esc(profileName(agent))}${(run?.simulation||(!run&&profiles().find(p=>p.id===agent)?.simulation))?' [SIMULATION]':''}</span></div><div class="card-title">${esc(t.title)}</div><div class="card-description">${esc(t.description)}</div>${run?.error?`<div class="card-error">${esc(run.error)}</div>`:''}<div class="card-bottom"><span>${esc(statusText[t.status])}</span><span>${esc(bottom)}</span></div></button>`;
 }
 function openDrawer(id) {activeTask=id;$('#shade').classList.remove('hidden');$('#drawer').classList.remove('hidden');drawDrawer();}
 function closeDrawer() {activeTask=null;$('#shade').classList.add('hidden');$('#drawer').classList.add('hidden');}
@@ -87,7 +88,7 @@ function drawDrawer() {
   if (t.status==='done' && t.mode==='implement' && run?.promotion && Object.keys(run.promotion).length) actions += '<button class="danger" data-action="rollback">撤回本次接入</button>';
   const checkRows = run ? (run.evidence||[]).map(item=>`<div class="check ${item.status==='pass'?'ok':item.status==='fail'?'bad':''}">${item.status==='pass'?'✓':item.status==='fail'?'✕':'○'} <strong>${esc(item.label)}</strong> · ${esc(item.detail)}</div>`).join('') || `<div class="check">${esc(run.error || 'Python 正在检查')}</div>` : '<div class="check">尚未运行</div>';
   $('#drawer-body').innerHTML = `<h2>${esc(t.title)}</h2><div class="detail-desc">${esc(t.description)}</div>
-    <div class="detail-section"><div class="detail-row"><span>状态</span><strong>${esc(statusText[t.status])}</strong></div><div class="detail-row"><span>指定执行者</span><strong>${t.agent==='codex'?'Codex':'DeepSeek'}</strong></div>${run?`<div class="detail-row"><span>实际执行者</span><strong>${run.agent==='codex'?'Codex':'DeepSeek'}</strong></div>`:''}<div class="detail-row"><span>方式</span><strong>${t.mode==='explore'?'只读调查':'开发修改'}</strong></div><div class="detail-row"><span>时限</span><strong>${t.limit_minutes} 分钟</strong></div><div class="detail-row"><span>任务 ID</span><strong>${esc(t.id)}</strong></div>${run?.started_at?`<div class="detail-row"><span>开始</span><strong>${esc(new Date(run.started_at).toLocaleString())}</strong></div>`:''}</div>
+    <div class="detail-section"><div class="detail-row"><span>状态</span><strong>${esc(statusText[t.status])}</strong></div><div class="detail-row"><span>指定执行者</span><strong>${esc(profileName(t.agent))}</strong></div>${run?`<div class="detail-row"><span>实际执行者</span><strong>${esc(profileName(run.agent))}</strong></div>`:''}<div class="detail-row"><span>方式</span><strong>${t.mode==='explore'?'只读调查':'开发修改'}</strong></div><div class="detail-row"><span>时限</span><strong>${t.limit_minutes} 分钟</strong></div><div class="detail-row"><span>任务 ID</span><strong>${esc(t.id)}</strong></div>${run?.started_at?`<div class="detail-row"><span>开始</span><strong>${esc(new Date(run.started_at).toLocaleString())}</strong></div>`:''}</div>
     ${run?.budget_note?`<div class="warning">${esc(run.budget_note)}</div>`:''}
     <div class="detail-section"><h3>允许改动</h3><div class="tag-list">${t.allowed_paths.map(x=>`<span class="tag">${esc(x)}</span>`).join('')||'<span class="tag">无 · 只读</span>'}</div></div>
     <div class="detail-section"><h3>关联资料</h3><div class="tag-list">${[...(state.projects.find(p=>p.id===t.project_id)?.context_files||[]),...(state.projects.find(p=>p.id===t.project_id)?.context_urls||[]),...(t.context_files||[]),...(t.context_urls||[])].map(x=>`<span class="tag">${esc(x)}</span>`).join('')||'<span class="hint">未配置；可在项目资料中选择</span>'}</div>${t.discussion_id?'<p class="hint">已关联讨论与共识，执行时会自动带入。</p>':''}</div>

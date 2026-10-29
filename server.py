@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, urlparse
 from usage_probe import read_five_hour_limit
 from context_sources import materialize_context, validate_references
 from group_chat import AGENTS, route_message, strip_handoff
+from agent_registry import AgentRegistry
 
 
 BASE = Path(__file__).resolve().parent
@@ -44,6 +45,7 @@ SKIP_DIRS = {
 MAX_REQUEST = 1_000_000
 LOCK = threading.RLock()
 PROCESSES: dict[str, subprocess.Popen] = {}
+REGISTRY = AgentRegistry(DATA)
 
 
 def now() -> str:
@@ -58,12 +60,16 @@ def digest(path: Path) -> str:
     return h.hexdigest()
 
 
+def skip_directory(path: Path) -> bool:
+    return path.name in SKIP_DIRS or path.is_symlink() or path.resolve() in (DATA, WORKSPACES)
+
+
 def inventory(root: Path) -> dict[str, str]:
     if not root.exists():
         return {}
     result: dict[str, str] = {}
     for directory, dirs, files in os.walk(root, followlinks=False):
-        dirs[:] = [name for name in dirs if name not in SKIP_DIRS and not (Path(directory) / name).is_symlink()]
+        dirs[:] = [name for name in dirs if not skip_directory(Path(directory) / name)]
         for name in files:
             path = Path(directory) / name
             if path.is_symlink():
@@ -189,8 +195,10 @@ def task_payload(body: dict, existing: dict | None = None) -> dict:
         raise ValueError("标题和任务描述不能为空")
     agent = str(body.get("agent", existing["agent"] if existing else "deepseek"))
     mode = str(body.get("mode", existing["mode"] if existing else "implement"))
-    if agent not in ("codex", "deepseek") or mode not in ("explore", "implement"):
+    if agent not in REGISTRY.ids() or mode not in ("explore", "implement"):
         raise ValueError("执行者或任务模式无效")
+    if mode == "implement" and not REGISTRY.get(agent)["can_implement"]:
+        raise ValueError("此Agent只支持讨论和只读调查 / This agent cannot implement changes")
     project_id = str(body.get("project_id", existing["project_id"] if existing else ""))
     find_project(project_id)
     patterns = valid_patterns(body.get("allowed_paths", existing["allowed_paths"] if existing else []))
@@ -319,7 +327,7 @@ def copy_source(project: dict, workspace: Path, task: dict | None = None) -> dic
         raise RuntimeError("隔离工作区已存在")
     total = 0
     for directory, dirs, files in os.walk(source, followlinks=False):
-        dirs[:] = [n for n in dirs if n not in SKIP_DIRS and not (Path(directory) / n).is_symlink()]
+        dirs[:] = [n for n in dirs if not skip_directory(Path(directory) / n)]
         for name in files:
             path = Path(directory) / name
             if not path.is_symlink():
@@ -328,7 +336,7 @@ def copy_source(project: dict, workspace: Path, task: dict | None = None) -> dic
                     raise RuntimeError("项目可复制文件超过 2GB；请缩小项目目录")
 
     def ignore(directory: str, names: list[str]) -> set[str]:
-        return {n for n in names if n in SKIP_DIRS or (Path(directory) / n).is_symlink()}
+        return {n for n in names if skip_directory(Path(directory) / n)}
 
     shutil.copytree(source, workspace, ignore=ignore)
     context = workspace / "_agentboard_context"
@@ -424,8 +432,13 @@ def write_capsule(task: dict, run: dict) -> None:
 
 
 def command_for(task: dict, workspace: Path, run_dir: Path) -> list[str]:
-    if TEST_MODE:
+    if TEST_MODE and task["agent"] in AGENTS:
         raise RuntimeError("测试模式禁止启动真实模型")
+    if task["agent"] not in AGENTS:
+        profile = REGISTRY.get(task["agent"])
+        if TEST_MODE and profile["kind"] != "mock":
+            raise RuntimeError("测试模式禁止启动真实模型")
+        return REGISTRY.command(task["agent"], workspace, run_dir / "answer.txt")
     if task["agent"] == "codex":
         exe = shutil.which("codex.cmd") or shutil.which("codex")
         if not exe:
@@ -569,7 +582,7 @@ def execute_run(run_id: str) -> None:
         if any(c["change"] == "deleted" for c in changes):
             errors.append("此版本不自动接入删除文件的改动")
         answer = run_dir / "answer.txt"
-        if run["agent"] == "deepseek":
+        if run["agent"] != "codex":
             shutil.copy2(run_dir / "stdout.txt", answer)
         answer_text = answer.read_text(encoding="utf-8", errors="replace") if answer.exists() else ""
         if not answer_text:
@@ -656,7 +669,11 @@ def dependencies_done(task: dict) -> bool:
 
 def start_task(task_id: str) -> dict:
     with LOCK:
-        requested_agent = find_task(task_id)["agent"]
+        candidate = find_task(task_id)
+        requested_agent = candidate["agent"]
+        profile = REGISTRY.get(requested_agent)
+        if candidate["mode"] == "implement" and not profile["can_implement"]:
+            raise ValueError("此Agent只支持讨论和只读调查 / This agent cannot implement changes")
     if requested_agent == "codex" and not TEST_MODE:
         refresh_budget()
     with LOCK:
@@ -685,6 +702,7 @@ def start_task(task_id: str) -> dict:
             save()
             return {"queued": True, "task": task}
         run = {"id": uuid.uuid4().hex[:12], "task_id": task_id, "agent": agent, "budget_note": budget_note,
+               "simulation": REGISTRY.get(agent)["kind"] == "mock",
                "status": "preparing", "created_at": now(), "started_at": None, "ended_at": None,
                "changes": [], "error": "", "stop_requested": False}
         STATE["runs"].append(run)
@@ -866,15 +884,28 @@ def answer_decision(task_id: str, answer: str) -> dict:
     return start_task(task_id)
 
 
+def agent_catalog() -> list[dict]:
+    return [REGISTRY.describe(p) for p in REGISTRY.all()]
+
+
+def save_agent(body: dict) -> dict:
+    with LOCK:
+        agent = str(body.get("id", "")).strip().lower()
+        if any(r["agent"] == agent and r["status"] in ("preparing", "running", "checking") for r in STATE["runs"]) or any(
+                c.get("status") == "running" and (c.get("agent") == agent or agent in c.get("members", [])) for c in STATE.get("chats", [])):
+            raise ValueError("Agent正在使用中，请结束后再修改 / Agent is in use")
+        return REGISTRY.save(body)
+
+
 def public_state() -> dict:
     with LOCK:
+        catalog = agent_catalog()
         return {"projects": STATE["projects"], "tasks": STATE["tasks"], "budget": STATE["budget"], "demo": DEMO_MODE,
                 "chats": [{k: c.get(k) for k in ("id", "project_id", "title", "agent", "status", "updated_at", "include_source", "task_id", "mode", "members")} for c in STATE.get("chats", [])],
                 "runs": [{k: v for k, v in r.items() if k not in ("source_before", "protected_before", "workspace_after")}
                          for r in STATE["runs"]], "agents": {
-                    "codex": bool(shutil.which("codex.cmd") or shutil.which("codex")),
-                    "deepseek": bool(shutil.which("dsh.cmd") or shutil.which("dsh") or shutil.which("npx.cmd") or shutil.which("npx")),
-                }}
+                    **{p["id"]: p["configured"] and p["enabled"] for p in catalog},
+                }, "agent_catalog": catalog}
 
 
 def find_chat(chat_id: str) -> dict:
@@ -886,13 +917,13 @@ def find_chat(chat_id: str) -> dict:
 
 def create_chat(body: dict) -> dict:
     agent = body.get("agent", "deepseek")
-    if agent not in ("codex", "deepseek"):
-        raise ValueError("请选择 Codex 或 DeepSeek")
+    if agent not in REGISTRY.ids():
+        raise ValueError("请选择已启用的Agent / Choose an enabled agent")
     mode = body.get("mode", "single")
-    members = body.get("members", list(AGENTS))
-    if mode not in ("single", "group") or not isinstance(members, list) or not members or any(a not in AGENTS for a in members):
+    members = body.get("members", REGISTRY.ids()[:6])
+    if mode not in ("single", "group") or not isinstance(members, list) or not members or len(members) > 6 or any(a not in REGISTRY.ids() for a in members):
         raise ValueError("群聊成员或聊天方式无效")
-    members = list(dict.fromkeys(members)) if mode == "group" else list(AGENTS)
+    members = list(dict.fromkeys(members)) if mode == "group" else REGISTRY.ids()
     with LOCK:
         project = find_project(str(body.get("project_id", "")))
         task_id = str(body.get("task_id", ""))
@@ -1009,9 +1040,9 @@ def send_chat(chat_id: str, body: dict) -> dict:
         chat = find_chat(chat_id)
         mode = chat.get("mode", "single")
         agent = body.get("agent", "all" if mode == "group" else chat["agent"])
-        if agent not in (*AGENTS, "all"):
+        if agent not in (*REGISTRY.ids(), "all"):
             raise ValueError("执行者无效")
-        routing = route_message(message, mode, agent, chat.get("members", list(AGENTS)), body.get("discussion_rounds", 0))
+        routing = route_message(message, mode, agent, chat.get("members", list(AGENTS)), body.get("discussion_rounds", 0), agents=REGISTRY.ids())
     if routing["recipients"] == ["codex"]:
         guard_codex_chat_budget()
     with LOCK:
@@ -1091,7 +1122,7 @@ def execute_chat(chat_id: str, turn_id: str, batch: dict | None = None, deadline
                             f"本批次用户原始问题：{batch['user_message']}\n")
             if batch["discussion"] and batch["remaining"] > 0:
                 room_context += ("用户已允许本批次有界的Agent互相讨论。先回应其他Agent的具体意见、指出分歧，避免重复项目背景。"
-                                 "如需要另一个成员接话，请在回复最后独立一行写 AGENTBOARD_TO: codex 或 AGENTBOARD_TO: deepseek；"
+                                 f"如需要另一个成员接话，请在回复最后独立一行写 AGENTBOARD_TO: 成员ID，可选成员为 {batch['members']}；"
                                  "已经达成结论或无需接话则写 AGENTBOARD_TO: DONE。只能邀请房间内其他成员，不能增加轮数。\n")
             else:
                 room_context += "本次只完成受邀回复，不请求其他Agent自动接话。\n"
@@ -1139,7 +1170,7 @@ def execute_chat(chat_id: str, turn_id: str, batch: dict | None = None, deadline
             raise RuntimeError("受保护文件发生变化，请先核对存档")
         if source_before is not None and inventory(Path(project["path"])) != source_before:
             raise RuntimeError("项目在回复期间已更新；请重新提问以获取新快照")
-        answer_file = turn_dir / ("stdout.txt" if agent == "deepseek" else "answer.txt")
+        answer_file = turn_dir / ("answer.txt" if agent == "codex" else "stdout.txt")
         answer = answer_file.read_text(encoding="utf-8", errors="replace").strip() if answer_file.is_file() else ""
         if not answer:
             raise RuntimeError("执行器没有返回回复")
@@ -1153,6 +1184,7 @@ def execute_chat(chat_id: str, turn_id: str, batch: dict | None = None, deadline
         with LOCK:
             chat = find_chat(chat_id)
             chat["messages"].append({"role": "assistant", "text": answer[:50000], "agent": agent, "created_at": now(),
+                                     "simulation": REGISTRY.get(agent)["kind"] == "mock",
                                      "handoff_to": handoff_to, "batch_id": batch["id"] if batch else None})
             chat.update(status="running" if batch else "idle", error="", updated_at=now())
             save()
@@ -1379,7 +1411,11 @@ class Handler(BaseHTTPRequestHandler):
             body = self.read_body()
             if DEMO_MODE:
                 raise ValueError("演示模式为只读示例，不启动Agent或修改项目；请运行python launch.py使用正式看板")
-            if path == "/api/tasks":
+            if path == "/api/agents":
+                result = save_agent(body)
+            elif path == "/api/agents/check":
+                result = REGISTRY.describe(REGISTRY.get(str(body.get("id", "")), enabled=False))
+            elif path == "/api/tasks":
                 result = create_task(body)
             elif path == "/api/chats":
                 result = create_chat(body)

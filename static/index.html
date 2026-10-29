@@ -16,6 +16,7 @@
       <div class="side-label">工作空间</div>
       <nav id="project-nav" class="project-nav"></nav>
       <button id="add-project" class="side-action">＋ 添加项目</button>
+      <button id="manage-agents" class="side-action">⚙ Agent 管理</button>
       <button id="open-chat" class="side-action">◌ 与 Agent 对话</button>
       <button id="open-group-chat" class="side-action">◎ Agent 群聊</button>
       <div class="sidebar-bottom">
@@ -105,6 +106,7 @@
         <div class="chat-settings-body">
         <div class="chat-project-label"><span class="eyebrow">当前项目</span><strong id="chat-project-name"></strong></div>
         <div class="chat-mode-controls"><label>聊天方式<select id="chat-mode" aria-label="聊天方式"><option value="single">单聊</option><option value="group">Agent 群聊</option></select></label><label>回复对象<select id="chat-agent" aria-label="对话执行者"><option value="all" hidden>发给全体</option><option value="deepseek">DeepSeek</option><option value="codex">Codex</option></select></label></div>
+        <fieldset id="chat-room-members" class="hidden"></fieldset>
         <div id="group-chat-help" class="group-chat-help hidden">成员：DeepSeek · Codex。普通消息全体回复；<code>/codex</code> 或 <code>/deepseek</code> 仅指定AI回复。所有消息在房间内共享。</div>
         <div class="chat-focus-panel"><div><strong id="chat-focus-title"></strong><div class="hint">自动带入已关联日志、任务目标、依赖和进度，无需重新介绍。</div></div><button id="chat-start-plan" type="button" class="soft">帮我判断下一步</button></div>
         <label class="chat-task-label">关联任务<select id="chat-task" aria-label="关联任务"></select></label>
@@ -119,17 +121,44 @@
       </details>
       </aside>
       <section class="chat-main">
-        <div class="chat-reading-head"><strong>聊天记录</strong><span>Codex / DeepSeek</span></div>
+        <div class="chat-reading-head"><strong>聊天记录</strong><span>AgentBoard</span></div>
         <div id="chat-messages" class="chat-messages" role="log" aria-label="对话记录"></div>
         <div id="chat-status" class="chat-status" role="status"></div>
         <form id="chat-form"><textarea id="chat-input" rows="3" maxlength="12000" placeholder="先聊想法、问问题，或一起整理下一张任务卡…" aria-label="发送给 Agent 的消息" required></textarea><div class="chat-compose-actions"><span class="hint">Ctrl / ⌘ + Enter 发送</span><button id="chat-stop" type="button" class="danger hidden">停止回复</button><button id="chat-send" type="submit" class="primary">发送</button></div></form>
       </section>
     </div>
   </dialog>
+
+  <dialog id="agents-dialog" class="dialog">
+    <div class="dialog-head"><h2>Agent 管理</h2><button type="button" class="icon-btn close-dialog" aria-label="关闭">×</button></div>
+    <p class="hint">无需新账号即可添加本地模拟Agent。检查配置不调用模型，也不代表账号登录或服务连接成功。</p>
+    <div id="agent-list"></div><p id="agent-check-result" role="status"></p>
+    <form id="agent-form">
+      <h3>添加 / 编辑 Agent</h3>
+      <label>Agent ID<input name="id" required pattern="[a-z][a-z0-9_-]{1,31}" placeholder="local-helper"></label>
+      <label>显示名称<input name="name" required maxlength="60"></label>
+      <label>接入类型<select name="kind"><option value="mock">本地模拟（无需账号）</option><option value="cli">命令行程序</option><option value="api">兼容 Chat Completions API</option></select></label>
+      <div id="agent-cli-fields" class="hidden">
+        <label>可执行程序<input name="executable" placeholder="C:\Tools\agent.exe"></label>
+        <label>参数 JSON 数组<textarea name="args" rows="3">[]</textarea></label>
+        <p class="hint">提示词通过标准输入传入，纯文本结果从标准输出读取。参数可用 {workspace}、{answer_file}。程序在隔离副本运行；权限边界仍取决于执行器本身。</p>
+        <label class="checkline"><input type="checkbox" name="can_implement">允许该命令行Agent执行开发任务</label>
+      </div>
+      <div id="agent-api-fields" class="hidden">
+        <label>完整接口地址<input name="endpoint" placeholder="https://provider.example/v1/chat/completions"></label>
+        <label>模型名称<input name="model"></label>
+        <label>密钥环境变量名<input name="key_env" placeholder="MY_AGENT_API_KEY"></label>
+        <p class="hint">只填写变量名，不填写密钥。API模式仅支持讨论和只读调查；发送时会把关联项目上下文提交到你配置的服务，可能产生费用。</p>
+      </div>
+      <label class="checkline"><input type="checkbox" name="enabled" checked>启用Agent</label>
+      <div class="dialog-foot"><button type="button" id="agent-new" class="ghost">清空表单</button><button type="submit" class="primary">保存Agent</button></div>
+    </form>
+  </dialog>
   <div id="toast" class="toast hidden" role="status"></div>
   <script src="/static/i18n.js"></script>
   <script src="/static/app.js"></script>
   <script src="/static/chat.js"></script>
   <script src="/static/context.js"></script>
+  <script src="/static/agents.js"></script>
 </body>
 </html>

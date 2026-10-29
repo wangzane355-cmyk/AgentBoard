@@ -63,7 +63,7 @@ python demo.py
 
 这是早期版本，主要在Windows上手动验证。Linux/macOS的真实执行器链路尚未完整验证。
 
-目前内置 Codex 和 DeepSeek Harness，尚未提供“添加任意Agent”的设置页面。扩展其他Agent需要适配执行命令、群聊路由和结果收集，并保留时限、文件范围和人工查收规则。
+侧栏“Agent管理”支持添加本地模拟、命令行执行器和兼容API。没有新账号也能用模拟器验证任务、定向消息和群聊；模拟不会执行真实开发。API仅支持讨论和只读调查，命令行开发需单独启用。配置检查不调用模型，也不代表真实账号连接成功。详见[接入说明](docs/AGENTS.md)。
 
 Python可以检查进程、文件变化、保护文件、原项目并发改动以及配置的规则。没有编译或测试证据时会标出空缺，画面、手感和需求取舍仍由人判断。隔离副本与事后检查不等于操作系统权限隔离。
 
@@ -74,7 +74,7 @@ Python可以检查进程、文件变化、保护文件、原项目并发改动�
 ## 开发与许可
 
 ```bash
-python -m unittest -v test_server.py test_context_sources.py test_group_chat.py
+python -m unittest -v test_server.py test_context_sources.py test_group_chat.py test_agent_registry.py
 ```
 
 离线测试不会调用模型；真实模型试跑脚本需要单独手动运行。详见[贡献指南](CONTRIBUTING.md)。

@@ -49,6 +49,82 @@ class BoardTests(unittest.TestCase):
         self.assertEqual(self.board.initial_state()["projects"], [])
         self.assertEqual(self.board.initial_state()["chats"], [])
 
+    def test_board_runtime_data_is_not_copied_as_project_source(self):
+        runtime = self.source / "private-runtime"
+        runtime.mkdir()
+        (runtime / "agents.json").write_text('private-config', encoding='utf-8')
+        workspace = Path(self.tmp.name) / "source-copy"
+        with patch.object(self.board, "DATA", runtime):
+            self.assertNotIn("private-runtime/agents.json", self.board.inventory(self.source))
+            self.board.copy_source(self.board.find_project("test"), workspace)
+        self.assertFalse((workspace / "private-runtime").exists())
+
+    def add_simulator(self, agent="local-sim"):
+        return self.board.save_agent({"id": agent, "name": "Local simulator", "kind": "mock"})
+
+    def test_simulator_task_runs_without_accounts_and_is_marked(self):
+        self.add_simulator()
+        task = self.board.create_task({"title": "Simulation", "description": "Read-only rehearsal", "project_id": "test", "agent": "local-sim", "mode": "explore"})
+        with patch.object(self.board.threading, "Thread"):
+            run = self.board.start_task(task["id"])["run"]
+        self.board.execute_run(run["id"])
+        result = self.board.find_run(run["id"])
+        self.assertEqual(result["status"], "review", result.get("error"))
+        self.assertTrue(result["simulation"])
+        self.assertEqual((self.source / "sample.py").read_text(), "value = 1\n")
+
+    def test_custom_group_directing_and_shared_broadcast(self):
+        self.add_simulator("sim-one")
+        self.add_simulator("sim-two")
+        chat = self.board.create_chat({"project_id": "test", "agent": "sim-one", "mode": "group", "members": ["sim-one", "sim-two"]})
+        with patch.object(self.board.threading, "Thread"):
+            self.board.send_chat(chat["id"], {"message": "/sim-two Hello", "agent": "all"})
+        self.board.execute_group_chat(chat["id"], chat["turn_id"])
+        replies = [m for m in chat["messages"] if m["role"] == "assistant"]
+        self.assertEqual([m["agent"] for m in replies], ["sim-two"])
+        self.assertTrue(replies[0]["simulation"])
+        with patch.object(self.board.threading, "Thread"):
+            self.board.send_chat(chat["id"], {"message": "Hello everyone", "agent": "all"})
+        self.board.execute_group_chat(chat["id"], chat["turn_id"])
+        replies = [m for m in chat["messages"] if m["role"] == "assistant"]
+        self.assertEqual([m["agent"] for m in replies], ["sim-two", "sim-one", "sim-two"])
+
+    def test_agent_config_cannot_change_while_in_use(self):
+        self.add_simulator()
+        chat = self.board.create_chat({"project_id": "test", "agent": "local-sim"})
+        with patch.object(self.board.threading, "Thread"):
+            self.board.send_chat(chat["id"], {"message": "Hello"})
+        with self.assertRaises(ValueError):
+            self.board.save_agent({"id": "local-sim", "name": "Changed", "kind": "mock", "enabled": False})
+
+    def test_api_and_simulator_cannot_be_used_for_implementation(self):
+        self.add_simulator()
+        for agent in ("local-sim", "api-agent"):
+            if agent == "api-agent":
+                self.board.save_agent({"id": agent, "name": "API", "kind": "api", "endpoint": "https://provider.example/v1/chat/completions", "model": "sample", "key_env": "TEST_AGENT_KEY"})
+            with self.assertRaises(ValueError):
+                self.board.create_task({"title": "No edits", "description": "No", "project_id": "test", "agent": agent, "mode": "implement", "allowed_paths": ["sample.py"]})
+
+    def test_cli_adapter_uses_existing_scope_checks(self):
+        self.board.save_agent({"id": "local-cli", "name": "Local CLI", "kind": "cli", "executable": sys.executable, "args": ["-c", "from pathlib import Path; Path('outside.txt').write_text('no'); print('AGENTBOARD_STATUS: DONE')"], "can_implement": True})
+        task = self.board.create_task({"title": "Scope", "description": "Test scope", "project_id": "test", "agent": "local-cli", "mode": "implement", "allowed_paths": ["sample.py"]})
+        with patch.object(self.board.threading, "Thread"):
+            run = self.board.start_task(task["id"])["run"]
+        # Only allow this deliberately constructed local Python fixture, not real models.
+        command = self.board.REGISTRY.command("local-cli", self.source, self.source / "answer.txt")
+        with patch.object(self.board, "command_for", return_value=command):
+            self.board.execute_run(run["id"])
+        self.assertEqual(self.board.find_run(run["id"])["status"], "blocked")
+        self.assertFalse((self.source / "outside.txt").exists())
+
+    def test_disabled_agent_and_too_large_room_are_rejected(self):
+        self.add_simulator()
+        self.board.save_agent({"id": "local-sim", "name": "Disabled", "kind": "mock", "enabled": False})
+        with self.assertRaises(ValueError):
+            self.board.create_chat({"project_id": "test", "agent": "local-sim"})
+        with self.assertRaises(ValueError):
+            self.board.create_chat({"project_id": "test", "mode": "group", "members": ["codex"] * 7})
+
     def test_deepseek_profile_is_configurable_without_launching(self):
         with patch.object(self.board, "TEST_MODE", False), patch.dict(os.environ, {"AGENTBOARD_DEEPSEEK_PROFILE": "my-headless"}), patch.object(self.board.shutil, "which", return_value="dsh"):
             command = self.board.command_for({"agent": "deepseek"}, self.source, Path(self.tmp.name))

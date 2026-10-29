@@ -4,14 +4,15 @@ import re
 AGENTS = ("deepseek", "codex")
 
 
-def route_message(text: str, mode: str, selected: str, members: list[str], rounds=0) -> dict:
+def route_message(text: str, mode: str, selected: str, members: list[str], rounds=0, agents=None) -> dict:
+    agents = tuple(agents or AGENTS)
     try:
         rounds = int(rounds)
     except (TypeError, ValueError):
         raise ValueError("讨论轮数须是0至3的整数")
     if not 0 <= rounds <= 3:
         raise ValueError("最多讨论3轮")
-    directed = selected in AGENTS
+    directed = selected in agents
     recipients = [selected] if directed else list(members)
     if text.startswith("/"):
         command, _, content = text.partition(" ")
@@ -19,7 +20,7 @@ def route_message(text: str, mode: str, selected: str, members: list[str], round
         pieces = text.split(maxsplit=1)
         command = pieces[0].lower()
         content = pieces[1].strip() if len(pieces) == 2 else ""
-        if command in ("/codex", "/deepseek", "/ds"):
+        if command[1:] in agents or command == "/ds":
             recipient = "deepseek" if command == "/ds" else command[1:]
             recipients, directed, rounds = [recipient], True, 0
         elif command in ("/all", "/讨论", "/discuss"):
@@ -40,21 +41,21 @@ def route_message(text: str, mode: str, selected: str, members: list[str], round
             raise ValueError("未知命令；支持 /codex、/deepseek、/all、/讨论 2")
         if not content:
             raise ValueError("请在命令后填写消息内容")
-    if mode != "group" and selected not in AGENTS:
+    if mode != "group" and selected not in agents:
         raise ValueError("单聊请选择一个Agent")
-    if not recipients or any(agent not in members for agent in recipients):
+    if not recipients or any(agent not in members or agent not in agents for agent in recipients):
         raise ValueError("指定Agent不在这个房间中")
     if directed:
         rounds = 0  # Direct messages always get exactly one scheduled responder.
     return {"recipients": recipients, "directed": directed, "rounds": rounds,
-            "max_replies": len(recipients) * max(1, rounds)}
+            "max_replies": min(6, len(recipients) * max(1, rounds))}
 
 
 def strip_handoff(answer: str, sender: str, members: list[str]) -> tuple[str, str | None]:
     lines = answer.rstrip().splitlines()
     recipient = None
     if lines:
-        match = re.fullmatch(r"AGENTBOARD_TO:\s*(codex|deepseek|DONE)", lines[-1].strip())
+        match = re.fullmatch(r"AGENTBOARD_TO:\s*([a-z][a-z0-9_-]{1,31}|DONE)", lines[-1].strip())
         if match:
             target = match.group(1)
             if target in members and target != sender:

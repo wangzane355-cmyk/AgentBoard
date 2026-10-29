@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0 — 2026-10-29
+
+- Agent management for local simulators, stdin/stdout command-line adapters and compatible non-streaming Chat Completions endpoints.
+- Configurable chat recipients, room membership and slash commands; existing Codex/DeepSeek behavior retained. Discussions remain capped at six replies.
+- API keys referenced through environment variable names, never stored as values. Configuration checks do not call models or claim live authentication success.
+- Simulators work without accounts, keep saved simulation labels and cannot implement changes. API adapters support discussion and read-only investigation only.
+- Existing Python scope checks apply to CLI adapters; running agent configurations cannot be edited. Live third-party provider/account behavior remains unverified.
+- AgentBoard runtime data and worker roots are excluded from project copies and source hashes, including when developing AgentBoard itself.
+- Offline adapter tests use local subprocesses and a loopback fake provider, including directed routing, persisted simulation records, capability checks and credential/error redaction.
+
 ## 0.1.1 — 2026-10-28
 
 - Chinese / English interface switch in the page header and modal dialogs, with browser-local preference persistence.
