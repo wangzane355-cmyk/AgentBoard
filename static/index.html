@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="/static/mobile.css">
   <link rel="stylesheet" href="/static/layout.css">
   <link rel="stylesheet" href="/static/chat.css">
+  <link rel="stylesheet" href="/static/themes.css">
+  <script src="/static/appearance.js"></script>
 </head>
 <body>
   <div class="shell">
@@ -19,6 +21,7 @@
       <button id="manage-agents" class="side-action">⚙ Agent 管理</button>
       <button id="open-chat" class="side-action">◌ 与 Agent 对话</button>
       <button id="open-group-chat" class="side-action">◎ Agent 群聊</button>
+      <button id="open-settings" class="side-action">◐ 设置</button>
       <div class="sidebar-bottom">
         <div class="connection"><span class="pulse"></span> Python 看门脚本运行中</div>
         <div id="agent-status" class="agent-status"></div>
@@ -153,6 +156,14 @@
       <label class="checkline"><input type="checkbox" name="enabled" checked>启用Agent</label>
       <div class="dialog-foot"><button type="button" id="agent-new" class="ghost">清空表单</button><button type="submit" class="primary">保存Agent</button></div>
     </form>
+  </dialog>
+  <dialog id="appearance-dialog" class="dialog appearance-dialog" aria-labelledby="settings-title">
+    <div class="dialog-head"><h2 id="settings-title">设置</h2><button type="button" class="icon-btn close-dialog" aria-label="关闭设置">×</button></div>
+    <div class="appearance-layout"><nav class="settings-nav" aria-label="设置分类"><span>PERSONAL WORKSPACE</span><strong>◐ 外观</strong></nav>
+    <section class="appearance-content" aria-labelledby="appearance-heading"><div class="appearance-intro"><div><h3 id="appearance-heading">给专注，一点个性。</h3><p>三种视觉语言，同一个工作空间。选择后即时应用，仅保存在本机浏览器。</p></div><span class="appearance-edition">APPEARANCE / 01—03</span></div>
+    <div class="theme-options" role="group" aria-label="选择外观主题"><label class="theme-option"><input type="radio" name="appearance-theme" value="graphite"><span class="theme-art theme-art-graphite" aria-hidden="true"><span class="art-kicker">01 / FORM & SPACE</span><span class="art-wordmark">Less, clear.</span><span class="art-window"><span class="art-rail"><i></i><i></i><i></i></span><span class="art-canvas"><span class="art-toolbar"><b></b><i></i></span><span class="art-columns"><i></i><i></i><i></i></span></span></span></span><span class="theme-caption"><span class="theme-number">STUDY 01</span><span class="theme-name">静灰 · 极简</span><span class="theme-note">冷灰留白，细线秩序。轻盈、清晰、专注。</span><span class="theme-swatches" aria-hidden="true"><i style="--swatch:#f4f5f6"></i><i style="--swatch:#cdd3da"></i><i style="--swatch:#303a45"></i></span></span></label><label class="theme-option"><input type="radio" name="appearance-theme" value="construct"><span class="theme-art theme-art-construct" aria-hidden="true"><span class="art-kicker">02 / GRID & RHYTHM</span><span class="art-wordmark">Structure.</span><span class="art-window"><span class="art-rail"><i></i><i></i><i></i></span><span class="art-canvas"><span class="art-toolbar"><b></b><i></i></span><span class="art-columns"><i></i><i></i><i></i></span></span></span></span><span class="theme-caption"><span class="theme-number">STUDY 02</span><span class="theme-name">构成 · 酒红</span><span class="theme-note">米白与酒红。几何、节奏、纸感。</span><span class="theme-swatches" aria-hidden="true"><i style="--swatch:#eee8dc"></i><i style="--swatch:#812d3c"></i><i style="--swatch:#302824"></i></span></span></label><label class="theme-option"><input type="radio" name="appearance-theme" value="obsidian"><span class="theme-art theme-art-obsidian" aria-hidden="true"><span class="art-kicker">03 / SHADOW & STEEL</span><span class="art-wordmark">Quiet power.</span><span class="art-window"><span class="art-rail"><i></i><i></i><i></i></span><span class="art-canvas"><span class="art-toolbar"><b></b><i></i></span><span class="art-columns"><i></i><i></i><i></i></span></span></span></span><span class="theme-caption"><span class="theme-number">STUDY 03</span><span class="theme-name">黑曜 · 金属</span><span class="theme-note">深黑分层，钢色高光。沉静而有力量。</span><span class="theme-swatches" aria-hidden="true"><i style="--swatch:#090b0e"></i><i style="--swatch:#485463"></i><i style="--swatch:#a53c50"></i></span></span></label></div>
+    <div class="appearance-footer"><div class="appearance-status" role="status"><strong id="appearance-current"></strong><span>自动记住选择 · 不改变项目内容 · 不调用模型</span></div><button type="button" id="appearance-reset" class="ghost">恢复原始深色</button></div>
+    </section></div>
   </dialog>
   <div id="toast" class="toast hidden" role="status"></div>
   <script src="/static/i18n.js"></script>

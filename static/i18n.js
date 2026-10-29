@@ -2,6 +2,23 @@
 (() => {
   'use strict';
   const catalog = Object.fromEntries(String.raw`
+◐ 设置	◐ Settings
+设置	Settings
+关闭设置	Close settings
+设置分类	Settings categories
+◐ 外观	◐ Appearance
+给专注，一点个性。	Make room for your focus.
+三种视觉语言，同一个工作空间。选择后即时应用，仅保存在本机浏览器。	Three visual languages. One workspace. Applied instantly and remembered in this browser.
+选择外观主题	Choose an appearance theme
+静灰 · 极简	Graphite · Minimal
+构成 · 酒红	Construct · Burgundy
+黑曜 · 金属	Obsidian · Metal
+冷灰留白，细线秩序。轻盈、清晰、专注。	Cool neutrals. Fine lines. Light, clear and focused.
+米白与酒红。几何、节奏、纸感。	Warm paper and burgundy. Geometry with rhythm.
+深黑分层，钢色高光。沉静而有力量。	Layered black and steel highlights. Quiet strength.
+自动记住选择 · 不改变项目内容 · 不调用模型	Remembered locally · Project content stays intact · No model calls
+恢复原始深色	Restore original dark
+原始深色	Original dark
 ⚙ Agent 管理	⚙ Manage agents
 Agent 管理	Manage agents
 无需新账号即可添加本地模拟Agent。检查配置不调用模型，也不代表账号登录或服务连接成功。	Add a local simulator without an account. Configuration checks do not call models or verify authentication or provider connectivity.

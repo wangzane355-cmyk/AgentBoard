@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-10-29
+
+- Added local appearance preferences under Settings: Graphite, Construct and Obsidian, with original previews, instant switching and restore-default support. No executor or project behavior changes.
+
 ## 0.2.0 — 2026-10-29
 
 - Agent management for local simulators, stdin/stdout command-line adapters and compatible non-streaming Chat Completions endpoints.
