@@ -25,6 +25,7 @@ First public source release.
 - MIT license, bilingual documentation, contributor guidance and CI configuration.
 - Private runtime state, conversations, logs, snapshots and credentials excluded from Git.
 - Unity editor version read from the project; DeepSeek profile name configurable.
+- Offline test scheduling mocks stay local to the board, preserving Windows subprocess pipe readers; sample child processes use UTF-8.
 
 ### Known limitations
 - Early release, primarily manually verified on Windows.

@@ -5,11 +5,15 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 
 class BoardTests(unittest.TestCase):
     def setUp(self):
+        child_encoding = patch.dict(os.environ, {"PYTHONUTF8": "1"})
+        child_encoding.start()
+        self.addCleanup(child_encoding.stop)
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
         with patch.dict(os.environ, {"AGENTBOARD_DATA_DIR": str(root / "data"),
@@ -18,6 +22,9 @@ class BoardTests(unittest.TestCase):
             spec = importlib.util.spec_from_file_location("test_board_module", Path(__file__).with_name("server.py"))
             self.board = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(self.board)
+        # Mock only the board's scheduler. Windows subprocess.communicate uses
+        # the real threading module internally to drain pipes.
+        self.board.threading = SimpleNamespace(**vars(self.board.threading))
         self.source = root / "source"
         self.source.mkdir()
         (self.source / "sample.py").write_text("value = 1\n", encoding="utf-8")
