@@ -24,15 +24,53 @@ AgentBoard connects the discussion and delivery stages of a local project. Codex
 
 ## See it in action
 
-### Project board
+### Project board · Graphite theme
 
 ![AgentBoard task board in English](docs/assets/board.jpg)
 
-### Shared agent room
+### Shared agent room · Obsidian theme
 
 ![AgentBoard shared agent room in English](docs/assets/group-chat.jpg)
 
 *Screenshots use the built-in, read-only demo workspace. Cards and conversations are illustrative sample data, not reports of real agent execution.*
+
+### Appearance, kept personal
+
+Three original themes under **Settings → Appearance**, with instant switching, keyboard selection and local preference storage. The original dark theme remains available. [Design notes](docs/APPEARANCE.md)
+
+![Graphite, Construct and Obsidian theme selector](docs/assets/appearance.jpg)
+
+<details>
+<summary>Compare the three workspace themes</summary>
+
+| Graphite · Minimal | Construct · Burgundy | Obsidian · Metal |
+| --- | --- | --- |
+| [![Graphite workspace](docs/assets/theme-graphite.jpg)](docs/assets/theme-graphite.jpg) | [![Construct workspace](docs/assets/theme-construct.jpg)](docs/assets/theme-construct.jpg) | [![Obsidian workspace](docs/assets/theme-obsidian.jpg)](docs/assets/theme-obsidian.jpg) |
+
+These workspace samples use the Chinese interface. Both interface languages support every theme.
+
+</details>
+
+## New in 0.2.2
+
+| Update | What it enables |
+| --- | --- |
+| **Agent management** | Keep Codex and DeepSeek, add a compatible CLI or Chat Completions adapter, or rehearse with a local simulator without an account. |
+| **Room membership** | Choose invited agents and use `/agent-id` to address one member. Six-reply discussion limits remain in place. |
+| **Local preferences** | Chinese / English switching and three optional workspace themes, without model calls. |
+| **Windows startup fix** | Desktop shortcuts using `pythonw.exe` now handle windowless logging correctly; reopening checks the page response. |
+
+API adapters support discussion and read-only investigation; CLI implementation must be explicitly enabled. Configuration checks do not call a model or verify a live account. [Adapter guide](docs/AGENTS.md) · [Full changelog](CHANGELOG.md)
+
+<details>
+<summary>See the agent management screen</summary>
+
+![Local agent adapter configuration](docs/assets/agents.jpg)
+
+This is the read-only demonstration screen. Availability depends on the local installation; the screenshot does not establish provider authentication.
+
+</details>
+
 
 ## What you can do
 

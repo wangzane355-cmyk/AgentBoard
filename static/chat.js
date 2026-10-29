@@ -56,7 +56,7 @@ async function refreshChat() {
     const sessions = (state.chats||[]).filter(c=>c.project_id===chatProject).slice().reverse();
     const sessionSignature=JSON.stringify([chatProject,currentChat,sessions]);
     if(sessionSignature!==lastSessionSignature){
-      $('#chat-sessions').innerHTML = sessions.map(c=>`<button class="chat-session ${c.id===currentChat?'active':''}" data-chat="${esc(c.id)}"><strong>${esc(c.title)}</strong><small>${c.mode==='group'?esc((c.members||[]).map(agentName).join(' / ')):esc(agentName(c.agent))} · ${c.status==='running'?'回复中':c.status==='error'?'需查看':'已保存'}</small></button>`).join('') || '<p class="hint">当前项目还没有对话</p>';
+      $('#chat-sessions').innerHTML = sessions.map(c=>`<button class="chat-session ${c.id===currentChat?'active':''}" data-chat="${esc(c.id)}"><strong>${esc(c.title)}</strong><small>${c.mode==='group'?esc((c.members||[]).map(agentName).join(' / ')):esc(agentName(c.agent))} · ${AgentBoardI18n.choose(c.status==='running'?'回复中':c.status==='error'?'需查看':'已保存',c.status==='running'?'Replying':c.status==='error'?'Needs attention':'Saved')}</small></button>`).join('') || '<p class="hint">当前项目还没有对话</p>';
       document.querySelectorAll('[data-chat]').forEach(b=>b.onclick=async()=>{
       if(chatSending)return;
       currentChat=b.dataset.chat; chatData=null; lastMessageSignature='';

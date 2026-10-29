@@ -2,6 +2,8 @@
 
 ## 0.2.2 — 2026-10-29
 
+- Refreshed the bilingual release overview with current demo screenshots, agent-adapter documentation and an optional three-theme gallery; corrected English room-status labels and singular reply/round wording.
+
 - Fixed empty HTTP responses from Windows desktop shortcuts using pythonw.exe without console streams. Windowless launcher diagnostics are saved locally, and reopening checks page readiness rather than only an occupied port.
 
 ## 0.2.1 — 2026-10-29

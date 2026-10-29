@@ -13,6 +13,42 @@ AgentBoard 是一个本地运行的 Codex / DeepSeek 任务看板。两种 Agent
 
 以上来自内置只读演示，任务与对话均为明确标注的示例数据，不代表真实模型执行记录。
 
+### 外观偏好
+
+在“设置 → 外观”选择静灰、构成或黑曜，支持即时切换、键盘选择和本机记忆，也可恢复原始深色。[设计说明](docs/APPEARANCE.md)
+
+![三套原创主题的外观选择页](docs/assets/appearance.jpg)
+
+<details>
+<summary>展开对比三种工作区外观</summary>
+
+| 静灰 · 极简 | 构成 · 酒红 | 黑曜 · 金属 |
+| --- | --- | --- |
+| [![静灰工作区](docs/assets/theme-graphite.jpg)](docs/assets/theme-graphite.jpg) | [![构成工作区](docs/assets/theme-construct.jpg)](docs/assets/theme-construct.jpg) | [![黑曜工作区](docs/assets/theme-obsidian.jpg)](docs/assets/theme-obsidian.jpg) |
+
+</details>
+
+## 0.2.2 新版内容
+
+| 更新 | 可以做什么 |
+| --- | --- |
+| Agent 管理 | 保留 Codex / DeepSeek，添加命令行或兼容 API，也能先用无需账号的本地模拟器演练 |
+| 群聊成员选择 | 自选受邀成员，用 `/成员ID` 定向发言，继续保留最多六次回复的限制 |
+| 本机偏好 | 中英界面切换、三套原创主题，不消耗模型用量 |
+| Windows 启动修复 | 修复静默桌面快捷方式的空响应；重开时确认网页正常响应 |
+
+API接入仅支持讨论和只读调查，命令行开发能力需单独启用。“检查配置”不调用模型，也不代表账号登录或服务连接已经验证。[接入说明](docs/AGENTS.md) · [完整开发日志](CHANGELOG.md)
+
+<details>
+<summary>查看 Agent 管理界面</summary>
+
+![Agent管理与接入配置](docs/assets/agents.jpg)
+
+上图是只读演示界面，本机配置存在不等于真实账号已经通过验证。
+
+</details>
+
+
 ## 主要功能
 
 页面顶部和弹窗内可切换中文 / English，浏览器会记住选择。切换不会清空草稿，也不会翻译项目名称、任务正文、聊天原文或日志，不产生翻译模型用量。

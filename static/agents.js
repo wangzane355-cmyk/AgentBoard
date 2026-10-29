@@ -36,7 +36,7 @@ function renderRoomMembers(){
   const allowed=currentChat?chatData?.members:null;
   const members=allowed || selectedMembers();
   $('#group-chat-help').textContent=say('成员：','Members: ')+members.map(profileName).join(' · ')+say('。/成员ID 定向回复，/all 全体回复，最多六次回复。',' · /agent-id addresses one member; /all invites everyone. Up to six replies.');
-  for(const option of $('#group-rounds').options){const n=Number(option.value),count=Math.min(6,members.length*n);option.textContent=say(`最多${n}轮 / ${count}次回复`,`Up to ${n} rounds / ${count} replies`);}
+  for(const option of $('#group-rounds').options){const n=Number(option.value),count=Math.min(6,members.length*n);option.textContent=say(`最多${n}轮 / ${count}次回复`,`Up to ${n} ${n===1?'round':'rounds'} / ${count} ${count===1?'reply':'replies'}`);}
   for(const option of $('#chat-agent').options){
     if(option.value==='all'){option.hidden=!group;continue;}
     option.disabled=Boolean(group&&allowed&&!allowed.includes(option.value)) || !profiles().some(p=>p.id===option.value&&p.enabled);
