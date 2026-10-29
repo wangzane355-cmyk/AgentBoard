@@ -106,6 +106,11 @@ async function refreshChat() {
     $('#chat-reference-status').textContent=chatData?.context_read_at?`最近自动读取 ${chatData.context_sources?.length||0} 项资料 · ${new Date(chatData.context_read_at).toLocaleString()}${chatData.consensus?(chatData.consensus_needs_review?' · 关联任务已变，共识需核对':' · 已保存共识'):''}`:`已关联 ${referenceCount} 处资料，发送时自动读取；无需勾选源码。`;
     const batch=chatData?.mode==='group'?chatData.batch:null;
     $('#chat-status').textContent=running?(batch?`群聊：${batch.active_agent?agentName(batch.active_agent)+' 回复中':'准备中'} · 已完成 ${batch.completed}/${batch.max_replies} 次回复；关闭面板后继续，可随时停止。`:'Agent 正在回复，关闭面板后仍会继续。'):chatData?.error||(batch?.status==='done'?`本批次结束，${batch.completed} 次回复。`:'');
+    if(running){
+      const phase=chatData?.phase==='waiting_reply'?AgentBoardI18n.choose('等待执行器回复','Waiting for executor reply'):AgentBoardI18n.choose('正在准备执行器','Preparing executor');
+      const started=batch?.started_at||chatData?.reply_started_at||chatData?.updated_at;
+      $('#chat-status').textContent=`${phase} · ${agentName(batch?.active_agent||chatData?.agent)} · ${elapsed(started)} / 25:00${batch?` · ${batch.completed}/${batch.max_replies}`:''} · ${AgentBoardI18n.choose('可随时停止；回复完成后显示正文','Stop anytime; text appears when the reply is complete')}`;
+    }
     $('#chat-status').classList.toggle('chat-error',Boolean(chatData?.error));
   } catch(e) {toast(e.message);} finally {chatRefreshing=false;}
 }

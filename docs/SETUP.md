@@ -28,7 +28,7 @@ On Windows the adapter uses the unelevated workspace sandbox compatibility optio
 
 ## DeepSeek
 
-Install [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). AgentBoard calls `dsh --profile headless -`, or falls back to `npx --yes @deepseek-ai/dsh --profile headless -`. The npx fallback may download the package if it is not installed.
+Install [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) before starting a chat. AgentBoard uses an installed `dsh`, a standard Windows user installation, or a previously installed npm-cache entry invoked directly through Node. It never runs an automatic package download during a task or conversation. If none is found, it fails immediately with setup guidance instead of waiting for npm dependency resolution. An explicit absolute CLI or JavaScript entry can be set with `AGENTBOARD_DEEPSEEK_ENTRY`.
 
 ```bash
 dsh --profile headless --help
@@ -57,6 +57,7 @@ There is no preloaded personal project. Your own `data/` is created on first use
 | --- | --- | --- |
 | `AGENTBOARD_DATA_DIR` | State, conversations and run logs | `data/` beside the app |
 | `AGENTBOARD_WORKSPACES_DIR` | Isolated source copies | `~/AgentBoardWork` |
+| `AGENTBOARD_DEEPSEEK_ENTRY` | Optional absolute installed CLI or JavaScript entry | Auto-discover installed executors |
 | `AGENTBOARD_DEEPSEEK_PROFILE` | Harness profile compatible with headless stdin/stdout | `headless` |
 | `AGENTBOARD_UNITY_EDITOR_VERSION` | Override editor version for the Unity adapter | Read `ProjectSettings/ProjectVersion.txt` |
 
@@ -69,6 +70,6 @@ Python checks compile files for syntax; they are not a full test runner. The Uni
 - **Codex blocked:** inspect the quota error, account login and `codex app-server` availability.
 - **Reference read failure:** correct the local path or page URL. The app will not silently substitute stale references.
 - **Source changed since the task ran:** rerun the task against the current source to avoid overwriting newer edits.
-- **Port already occupied:** `launch.py` opens an existing listener on port 8765. Make sure it is your AgentBoard service; you can run `python server.py --port 8767` separately.
+- **Port already occupied:** `launch.py` opens the existing board only after its page responds normally. Make sure it is your AgentBoard service; you can run `python server.py --port 8767` separately.
 
 Windows is the primary manually verified platform. Report your OS, Python/CLI versions and a redacted error when asking for help.

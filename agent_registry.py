@@ -6,6 +6,7 @@ import shutil
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
+from executor_discovery import deepseek_available
 
 BUILTINS = {
     "codex": {"id": "codex", "name": "Codex", "kind": "builtin", "enabled": True, "can_implement": True},
@@ -78,8 +79,7 @@ class AgentRegistry:
     def describe(self, profile):
         kind = profile["kind"]
         if kind == "builtin":
-            executables = ("codex.cmd", "codex") if profile["id"] == "codex" else ("dsh.cmd", "dsh", "npx.cmd", "npx")
-            ready = any(shutil.which(exe) for exe in executables)
+            ready = any(shutil.which(exe) for exe in ("codex.cmd", "codex")) if profile["id"] == "codex" else deepseek_available()
         elif kind == "cli":
             ready = bool(shutil.which(profile["executable"]) or Path(profile["executable"]).is_file())
         elif kind == "api":

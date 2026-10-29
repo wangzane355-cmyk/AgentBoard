@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 — 2026-10-29
+
+- Fixed group chats waiting in an npx package-resolution step before DeepSeek had actually started. Discover installed executors and cached entries directly; no automatic downloads during conversations or tasks.
+- Availability checks now require an installed DeepSeek entry rather than merely finding npx. An explicit entry override is supported.
+- Chat status distinguishes executor preparation from waiting for a reply and displays elapsed time. Existing time, scope and quota limits remain unchanged.
+
 ## 0.2.2 — 2026-10-29
 
 - Refreshed the bilingual release overview with current demo screenshots, agent-adapter documentation and an optional three-theme gallery; corrected English room-status labels and singular reply/round wording.

@@ -28,6 +28,7 @@ from usage_probe import read_five_hour_limit
 from context_sources import materialize_context, validate_references
 from group_chat import AGENTS, route_message, strip_handoff
 from agent_registry import AgentRegistry
+from executor_discovery import deepseek_command
 
 
 BASE = Path(__file__).resolve().parent
@@ -450,14 +451,8 @@ def command_for(task: dict, workspace: Path, run_dir: Path) -> list[str]:
                 *windows_options,
                 "-c", "sandbox_workspace_write.network_access=false",
                 "-c", "approval_policy=never", "-C", str(workspace), "--output-last-message", str(run_dir / "answer.txt"), "-"]
-    exe = shutil.which("dsh.cmd") or shutil.which("dsh")
     profile = os.environ.get("AGENTBOARD_DEEPSEEK_PROFILE", "headless")
-    if exe:
-        return [exe, "--profile", profile, "-"]
-    npx = shutil.which("npx.cmd") or shutil.which("npx")
-    if not npx:
-        raise RuntimeError("找不到 DeepSeek Harness 或 npx")
-    return [npx, "--yes", "@deepseek-ai/dsh", "--profile", profile, "-"]
+    return [*deepseek_command(), "--profile", profile, "-"]
 
 
 def terminate_process(proc: subprocess.Popen) -> None:
@@ -1055,7 +1050,7 @@ def send_chat(chat_id: str, body: dict) -> dict:
             chat["title"] = find_task(chat["task_id"])["title"][:60] if chat.get("task_id") else message[:36]
         chat["messages"].append({"role": "user", "text": message, "created_at": now(),
                                  "audience": routing["recipients"], "directed": routing["directed"]})
-        chat.update(agent=routing["recipients"][0], status="running", error="", stop_requested=False,
+        chat.update(agent=routing["recipients"][0], status="running", phase="preparing", reply_started_at=None, error="", stop_requested=False,
                     updated_at=now(), turn_id=uuid.uuid4().hex[:12])
         if mode == "group":
             chat["batch"] = {"id": chat["turn_id"], "status": "running", **routing,
@@ -1156,6 +1151,8 @@ def execute_chat(chat_id: str, turn_id: str, batch: dict | None = None, deadline
             proc = subprocess.Popen(cmd, cwd=workspace, stdin=subprocess.PIPE, stdout=out, stderr=err, creationflags=flags)
             with LOCK:
                 PROCESSES["chat-" + chat_id] = proc
+                find_chat(chat_id).update(phase="waiting_reply", reply_started_at=now())
+                save()
             try:
                 proc.communicate(input=prompt.encode("utf-8"), timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -1188,7 +1185,7 @@ def execute_chat(chat_id: str, turn_id: str, batch: dict | None = None, deadline
             chat["messages"].append({"role": "assistant", "text": answer[:50000], "agent": agent, "created_at": now(),
                                      "simulation": REGISTRY.get(agent)["kind"] == "mock",
                                      "handoff_to": handoff_to, "batch_id": batch["id"] if batch else None})
-            chat.update(status="running" if batch else "idle", error="", updated_at=now())
+            chat.update(status="running" if batch else "idle", phase="preparing" if batch else "done", error="", updated_at=now())
             save()
         return True
     except Exception as exc:
@@ -1196,7 +1193,7 @@ def execute_chat(chat_id: str, turn_id: str, batch: dict | None = None, deadline
             terminate_process(proc)
         with LOCK:
             chat = find_chat(chat_id)
-            chat.update(status="error", error=str(exc), updated_at=now())
+            chat.update(status="error", phase="error", error=str(exc), updated_at=now())
             save()
         return False
     finally:
