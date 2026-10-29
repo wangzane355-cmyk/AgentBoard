@@ -29,6 +29,7 @@ from context_sources import materialize_context, validate_references
 from group_chat import AGENTS, route_message, strip_handoff
 from agent_registry import AgentRegistry
 from executor_discovery import deepseek_command
+from managed_executors import ManagedExecutors
 
 
 BASE = Path(__file__).resolve().parent
@@ -47,6 +48,7 @@ MAX_REQUEST = 1_000_000
 LOCK = threading.RLock()
 PROCESSES: dict[str, subprocess.Popen] = {}
 REGISTRY = AgentRegistry(DATA)
+EXECUTORS = ManagedExecutors(DATA)
 
 
 def now() -> str:
@@ -452,7 +454,7 @@ def command_for(task: dict, workspace: Path, run_dir: Path) -> list[str]:
                 "-c", "sandbox_workspace_write.network_access=false",
                 "-c", "approval_policy=never", "-C", str(workspace), "--output-last-message", str(run_dir / "answer.txt"), "-"]
     profile = os.environ.get("AGENTBOARD_DEEPSEEK_PROFILE", "headless")
-    return [*deepseek_command(), "--profile", profile, "-"]
+    return [*deepseek_command(DATA), "--profile", profile, "-"]
 
 
 def terminate_process(proc: subprocess.Popen) -> None:
@@ -902,7 +904,7 @@ def public_state() -> dict:
                 "runs": [{k: v for k, v in r.items() if k not in ("source_before", "protected_before", "workspace_after")}
                          for r in STATE["runs"]], "agents": {
                     **{p["id"]: p["configured"] and p["enabled"] for p in catalog},
-                }, "agent_catalog": catalog}
+                }, "agent_catalog": catalog, "executors": EXECUTORS.status()}
 
 
 def find_chat(chat_id: str) -> dict:
@@ -1411,7 +1413,17 @@ class Handler(BaseHTTPRequestHandler):
             body = self.read_body()
             if DEMO_MODE:
                 raise ValueError("演示模式为只读示例，不启动Agent或修改项目；请运行python launch.py使用正式看板")
-            if path == "/api/agents":
+            if path.startswith("/api/executors/"):
+                action=path.rsplit("/",1)[-1]
+                if action=="latest":result=EXECUTORS.latest()
+                elif action=="prepare":result=EXECUTORS.start_prepare(str(body.get("version","")).strip())
+                elif action in ("activate","rollback","check"):
+                    with LOCK:
+                        if any(r["status"] in ("preparing","running","checking") for r in STATE["runs"]) or any(c.get("status")=="running" for c in STATE.get("chats",[])):
+                            raise ValueError("请结束运行中的任务和对话后再切换或检查 / Wait until active work finishes")
+                        result=EXECUTORS.activate(str(body.get("slot",""))) if action=="activate" else EXECUTORS.rollback() if action=="rollback" else EXECUTORS.check()
+                else:raise ValueError("Invalid executor action")
+            elif path == "/api/agents":
                 result = save_agent(body)
             elif path == "/api/agents/check":
                 result = REGISTRY.describe(REGISTRY.get(str(body.get("id", "")), enabled=False))
@@ -1491,6 +1503,8 @@ def main() -> None:
     parser.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    if not DEMO_MODE:
+        EXECUTORS.startup_check()
     if not DEMO_MODE:
         refresh_budget()
     budget_stop = threading.Event()

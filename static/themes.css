@@ -186,3 +186,5 @@
 @media(forced-colors:active){.theme-option:has(input:checked){outline:3px solid Highlight}.theme-art{forced-color-adjust:none}}
 
 @media(max-width:720px){#open-settings:before{content:"◐"}}
+
+.runtime-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding:9px 0;font-size:12px}.runtime-row button{font-size:11px;padding:6px 8px}#executor-version{width:150px;min-width:0;margin:0}#executor-operation{font-size:12px;overflow-wrap:anywhere;color:var(--muted)}#executor-manager{margin:14px 0 20px;padding:12px;border:1px solid var(--line);border-radius:var(--radius-control)}

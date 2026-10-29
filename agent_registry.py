@@ -79,7 +79,7 @@ class AgentRegistry:
     def describe(self, profile):
         kind = profile["kind"]
         if kind == "builtin":
-            ready = any(shutil.which(exe) for exe in ("codex.cmd", "codex")) if profile["id"] == "codex" else deepseek_available()
+            ready = any(shutil.which(exe) for exe in ("codex.cmd", "codex")) if profile["id"] == "codex" else deepseek_available(self.path.parent)
         elif kind == "cli":
             ready = bool(shutil.which(profile["executable"]) or Path(profile["executable"]).is_file())
         elif kind == "api":

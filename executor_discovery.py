@@ -14,7 +14,11 @@ def _entry_command(path: Path) -> list[str] | None:
     return [str(path)]
 
 
-def deepseek_command() -> list[str]:
+def deepseek_command(data=None) -> list[str]:
+    if data is not None:
+        from managed_executors import managed_command
+        command=managed_command(data)
+        if command:return command
     explicit = os.environ.get("AGENTBOARD_DEEPSEEK_ENTRY", "").strip()
     if explicit:
         path = Path(explicit).expanduser()
@@ -61,9 +65,9 @@ def deepseek_command() -> list[str]:
     raise RuntimeError("未找到已安装的DeepSeek CLI；请先安装，或设置AGENTBOARD_DEEPSEEK_ENTRY。聊天不会自动下载程序 / DeepSeek CLI is not installed; automatic downloads are disabled")
 
 
-def deepseek_available() -> bool:
+def deepseek_available(data=None) -> bool:
     try:
-        deepseek_command()
+        deepseek_command(data)
         return True
     except RuntimeError:
         return False

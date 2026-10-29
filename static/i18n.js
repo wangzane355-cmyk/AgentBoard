@@ -19,6 +19,15 @@
 自动记住选择 · 不改变项目内容 · 不调用模型	Remembered locally · Project content stays intact · No model calls
 恢复原始深色	Restore original dark
 原始深色	Original dark
+DeepSeek 后台版本与启动检查	DeepSeek runtime versions and startup checks
+固定后台入口，保留旧版本。检查不调用模型；新版本准备完成后仍需手动切换。	Pin the runtime and retain previous versions. Checks never call a model. Prepared versions require explicit activation.
+固定当前安装（不下载）	Pin installed copy (no download)
+检查当前版本	Check current version
+回退旧版本	Roll back
+检查官方更新	Check official updates
+指定执行器版本	Exact runtime version
+准备指定版本	Prepare version
+密钥和登录资料仍保留在原配置中。这里只检查程序版本及headless参数，不代表真实账号连通性已验证。	Credentials remain in the existing configuration. Version and headless argument checks do not verify live account connectivity.
 ⚙ Agent 管理	⚙ Manage agents
 Agent 管理	Manage agents
 无需新账号即可添加本地模拟Agent。检查配置不调用模型，也不代表账号登录或服务连接成功。	Add a local simulator without an account. Configuration checks do not call models or verify authentication or provider connectivity.

@@ -10,6 +10,7 @@ function profileOptions(selected, allowAll=false){
   return (allowAll?'<option value="all">'+say('发给全体','Everyone')+'</option>':'')+active.map(p=>`<option data-agent-option value="${esc(p.id)}" ${p.enabled?'':'disabled'}>${esc(p.name)}${p.kind==='mock'?' [SIMULATION]':''}</option>`).join('');
 }
 function renderAgents(){
+  if(typeof renderExecutorManager==='function')renderExecutorManager();
   $('#manage-agents').disabled=!state.agent_catalog;
   $('#manage-agents').textContent=state.agent_catalog?say('⚙ Agent 管理','⚙ Manage agents'):say('⚙ Agent 管理（需重启）','⚙ Manage agents (restart required)');
   if(!state.demo)$('#agent-status').innerHTML=profiles().filter(p=>p.enabled).map(p=>`<span class="mini-badge ${p.configured?'ok':''}">${esc(p.name)}${p.kind==='mock'?' [SIMULATION]':''}</span>`).join('');

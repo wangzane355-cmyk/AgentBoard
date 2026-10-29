@@ -135,6 +135,15 @@
   <dialog id="agents-dialog" class="dialog">
     <div class="dialog-head"><h2>Agent 管理</h2><button type="button" class="icon-btn close-dialog" aria-label="关闭">×</button></div>
     <p class="hint">无需新账号即可添加本地模拟Agent。检查配置不调用模型，也不代表账号登录或服务连接成功。</p>
+    <details id="executor-manager" class="detail-section">
+      <summary>DeepSeek 后台版本与启动检查</summary>
+      <p class="hint">固定后台入口，保留旧版本。检查不调用模型；新版本准备完成后仍需手动切换。</p>
+      <p id="executor-status" role="status"></p><p id="executor-operation" role="status"></p>
+      <div class="reference-actions"><button type="button" id="executor-pin" class="soft">固定当前安装（不下载）</button><button type="button" id="executor-check" class="ghost">检查当前版本</button><button type="button" id="executor-rollback" class="ghost">回退旧版本</button></div>
+      <div class="reference-actions"><button type="button" id="executor-latest" class="ghost">检查官方更新</button><input id="executor-version" maxlength="60" aria-label="指定执行器版本" placeholder="0.2.1-rc.5"><button type="button" id="executor-prepare" class="ghost">准备指定版本</button></div>
+      <p id="executor-update-result" class="hint"></p><div id="executor-versions"></div>
+      <p class="hint">密钥和登录资料仍保留在原配置中。这里只检查程序版本及headless参数，不代表真实账号连通性已验证。</p>
+    </details>
     <div id="agent-list"></div><p id="agent-check-result" role="status"></p>
     <form id="agent-form">
       <h3>添加 / 编辑 Agent</h3>
@@ -171,5 +180,6 @@
   <script src="/static/chat.js"></script>
   <script src="/static/context.js"></script>
   <script src="/static/agents.js"></script>
+  <script src="/static/executors.js"></script>
 </body>
 </html>

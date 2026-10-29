@@ -6,8 +6,9 @@ Contributions that make local agent coordination clearer, easier to verify and l
 
 ```bash
 python demo.py
-python -m unittest -v test_server.py test_context_sources.py test_group_chat.py test_agent_registry.py test_launch.py test_executor_discovery.py
+python -m unittest -v test_server.py test_context_sources.py test_group_chat.py test_agent_registry.py test_launch.py test_executor_discovery.py test_managed_executors.py
 node --check static/appearance.js
+node --check static/executors.js
 node --check static/agents.js
 node --check static/i18n.js
 node --check static/app.js

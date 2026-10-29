@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0 — 2026-10-29
+
+- Added managed DeepSeek runtime slots with a fixed local Node runtime, startup checks, explicit preparation/activation and manual rollback. Existing desktop applications and credentials remain separate.
+- Preparing a new version preserves the selected version; failed checks never switch the pointer. Updates use exact official npm versions with lifecycle scripts disabled. Checks never call a model.
+
 ## 0.2.3 — 2026-10-29
 
 - Fixed group chats waiting in an npx package-resolution step before DeepSeek had actually started. Discover installed executors and cached entries directly; no automatic downloads during conversations or tasks.
