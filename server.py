@@ -1,6 +1,7 @@
 """Local task board and Python supervisor for Codex CLI / DeepSeek Harness.
 
-Only binds to loopback. Agents work in disposable copies, never the source project.
+The desktop service binds to loopback; phone access is an opt-in paired LAN listener.
+Agents work in disposable copies, never the source project.
 Uses Python's standard library so the board can be moved to another machine.
 """
 from __future__ import annotations
@@ -27,7 +28,7 @@ from urllib.parse import parse_qs, urlparse
 
 from usage_probe import read_account_limits, codex_budget_block_reason
 from context_sources import materialize_context, validate_references
-from group_chat import AGENTS, route_message, strip_handoff
+from group_chat import AGENTS, route_message, strip_handoff, parse_reply_directive
 from agent_registry import AgentRegistry
 from executor_discovery import deepseek_command
 from managed_executors import ManagedExecutors
@@ -37,6 +38,8 @@ from autonomy_bridge import BoardRuntime
 from verification import validate_checks, browser_executable
 from supervised_process import process_stamp
 from task_archive import archive_task, restore_task, archive_project, restore_project
+from phone_access import PhoneAccess
+from phone_firewall import PhoneFirewall
 
 
 BASE = Path(__file__).resolve().parent
@@ -45,6 +48,7 @@ STATE_FILE = DATA / "state.json"
 RUNS = DATA / "runs"
 WORKSPACES = Path(os.environ.get("AGENTBOARD_WORKSPACES_DIR", str(Path.home() / "AgentBoardWork"))).resolve()
 STATIC = BASE / "static"
+MANAGED_PROJECTS = Path(os.environ.get("AGENTBOARD_PROJECTS_DIR", str(Path.home() / "AgentBoardProjects"))).expanduser().resolve()
 TEST_MODE = os.environ.get("AGENTBOARD_TEST_MODE") == "1"
 DEMO_MODE = os.environ.get("AGENTBOARD_DEMO_MODE") == "1"
 SKIP_DIRS = {
@@ -59,6 +63,8 @@ REGISTRY = AgentRegistry(DATA)
 EXECUTORS = ManagedExecutors(DATA)
 MODELS = ModelSettings(DATA)
 _AUTONOMY_SERVICE = None
+_PHONE_ACCESS = None
+_PHONE_FIREWALL = None
 APP_VERSION = "0.4.0-local"
 BOOT_FILES = {path.name: path.stat().st_mtime_ns for path in BASE.glob("*.py")}
 
@@ -70,6 +76,28 @@ def autonomy_service():
             _AUTONOMY_SERVICE = AutonomyService(DATA, BoardRuntime(globals()),
                 max_workers=int(os.environ.get("AGENTBOARD_AUTONOMOUS_WORKERS", "1")))
         return _AUTONOMY_SERVICE
+
+
+def phone_access_service():
+    global _PHONE_ACCESS
+    with LOCK:
+        if _PHONE_ACCESS is None:
+            _PHONE_ACCESS = PhoneAccess(Handler, DATA, STATIC)
+        return _PHONE_ACCESS
+
+
+def phone_firewall_service():
+    global _PHONE_FIREWALL
+    with LOCK:
+        if _PHONE_FIREWALL is None:
+            _PHONE_FIREWALL = PhoneFirewall(program=sys.executable)
+        return _PHONE_FIREWALL
+
+
+def phone_access_status():
+    result = phone_access_service().status()
+    result["firewall"] = phone_firewall_service().status(port=result["port"])
+    return result
 
 
 def create_autonomous_task(body):
@@ -380,17 +408,33 @@ def create_task(body: dict) -> dict:
 
 
 def create_project(body: dict) -> dict:
-    raw_path = str(body.get("path", "")).strip()
-    if not raw_path:
-        raise ValueError("请输入项目目录")
-    requested = Path(raw_path).expanduser()
-    path = requested.resolve()
     name = str(body.get("name", "")).strip()
-    create_directory = body.get("create_directory", False)
-    if not isinstance(create_directory, bool):
-        raise ValueError("新建文件夹设置须为布尔值")
     if not name or len(name) > 120:
         raise ValueError("请输入1至120字的项目名称")
+    managed = body.get("managed_directory", False)
+    if not isinstance(managed, bool):
+        raise ValueError("自动项目文件夹设置须为布尔值")
+    raw_path = str(body.get("path", "")).strip()
+    create_directory = body.get("create_directory", managed)
+    if not isinstance(create_directory, bool):
+        raise ValueError("新建文件夹设置须为布尔值")
+    if managed:
+        if raw_path:
+            raise ValueError("自动创建项目时不用填写文件夹地址")
+        if not create_directory:
+            raise ValueError("请选择创建项目文件夹")
+        # A fixed parent and generated suffix keep phone-created folders unique.
+        # User titles remain unchanged; only the disk folder name is sanitized.
+        folder = "".join("-" if char in '<>:"/\\|?*' or ord(char) < 32 else char for char in name)
+        folder = folder.strip(" .-")[:64] or "project"
+        if folder.upper().split(".")[0] in {"CON", "PRN", "AUX", "NUL", *[f"COM{i}" for i in range(1, 10)], *[f"LPT{i}" for i in range(1, 10)]}:
+            folder = "project-" + folder
+        requested = MANAGED_PROJECTS / (folder + "-" + uuid.uuid4().hex[:8])
+    else:
+        if not raw_path:
+            raise ValueError("请输入项目目录，或选择由电脑自动创建")
+        requested = Path(raw_path).expanduser()
+    path = requested.resolve()
     if create_directory and not requested.is_absolute():
         raise ValueError("新建项目文件夹需要完整的绝对路径")
     if (WORKSPACES.is_relative_to(path) or path.is_relative_to(WORKSPACES)
@@ -1271,6 +1315,8 @@ def send_chat(chat_id: str, body: dict) -> dict:
         if mode == "group":
             chat["batch"] = {"id": chat["turn_id"], "status": "running", **routing,
                              "completed": 0, "processed": 0, "active_agent": None,
+                             "requested_rounds": max(1, routing["rounds"]), "round": 0, "completed_rounds": 0,
+                             "end_reason": "", "finish_detail": "", "skipped_agents": [],
                              "pending": routing["recipients"], "started_at": now(), "user_message": message}
         save()
         turn_id = chat["turn_id"]
@@ -1329,14 +1375,21 @@ def execute_chat(chat_id: str, turn_id: str, batch: dict | None = None, deadline
         room_context = ""
         if batch:
             room_context = (f"这是共享群聊，你的身份是{agent}，成员为{batch['members']}。"
-                            f"本次由{batch['invited_by']}邀请你发言，这是第{batch['step']}次回复。"
+                            f"本次由{batch['invited_by']}邀请你发言，这是第{batch['step']}次回复，"
+                            f"当前为第{batch.get('round', 1)}/{batch.get('requested_rounds', 1)}轮。"
+                            f"本次之后最多还可安排{batch['remaining']}次回复，本批次总数不超过6。"
                             "共享记录中assistant的agent字段是真实发言者。只代表自己，不得代写其他Agent或用户的回复。"
                             "定向消息仍在共享记录中，但只有受邀Agent可以响应。\n"
                             f"本批次用户原始问题：{batch['user_message']}\n")
-            if batch["discussion"] and batch["remaining"] > 0:
-                room_context += ("用户已允许本批次有界的Agent互相讨论。先回应其他Agent的具体意见、指出分歧，避免重复项目背景。"
-                                 f"如需要另一个成员接话，请在回复最后独立一行写 AGENTBOARD_TO: 成员ID，可选成员为 {batch['members']}；"
-                                 "已经达成结论或无需接话则写 AGENTBOARD_TO: DONE。只能邀请房间内其他成员，不能增加轮数。\n")
+            if batch["discussion"]:
+                room_context += ("用户已允许本批次有界的Agent逐轮讨论。Python会安排每轮各成员最多发言一次，"
+                                 "不写接话标记也会在剩余上限内继续，不能自行增加轮数。第一轮给出自己的判断；"
+                                 "后续轮次请明确回应上一轮其他成员的具体观点、指出仍有的分歧或修正意见，避免重复项目背景。"
+                                 "如果你认为自己没有更多补充、可以结束，请在回复最后独立一行写 AGENTBOARD_TO: DONE。"
+                                 "这只表示你本人愿意结束；Python只有在完整一轮各成员均明确表示结束后才会提前停止，"
+                                 "不代表方案已经机器验收或用户确认。"
+                                 f"也可在最后独立一行写 AGENTBOARD_TO: 成员ID，表达希望谁回应，可选成员为 {batch['members']}；"
+                                 "该标记只是建议，不会跳过其他成员或扩大调用预算。\n")
             else:
                 room_context += "本次只完成受邀回复，不请求其他Agent自动接话。\n"
         prompt = (("当前是自由讨论，尚未关联项目；围绕想法展开，不虚构项目进度。\n" if not project["id"] else "")
@@ -1395,19 +1448,21 @@ def execute_chat(chat_id: str, turn_id: str, batch: dict | None = None, deadline
         answer = answer_file.read_text(encoding="utf-8", errors="replace").strip() if answer_file.is_file() else ""
         if not answer:
             raise RuntimeError("执行器没有返回回复")
-        handoff_to = None
+        handoff_to, discussion_done = None, False
         if batch:
-            answer, handoff_to = strip_handoff(answer, agent, batch["members"])
+            answer, handoff_to, discussion_done = parse_reply_directive(answer, agent, batch["members"])
             if not answer:
                 raise RuntimeError("Agent只返回了接话标记，没有实际回复")
             if not batch["discussion"]:
-                handoff_to = None
+                handoff_to, discussion_done = None, False
         with LOCK:
             chat = find_chat(chat_id)
             chat["messages"].append({"role": "assistant", "text": answer[:50000], "agent": agent, "created_at": now(),
                                      "model_record": model_record,
                                      "simulation": REGISTRY.get(agent)["kind"] == "mock",
-                                     "handoff_to": handoff_to, "batch_id": batch["id"] if batch else None})
+                                     "handoff_to": handoff_to, "discussion_done": discussion_done,
+                                     "discussion_round": batch.get("round", 1) if batch else None,
+                                     "batch_id": batch["id"] if batch else None})
             chat.update(status="running" if batch else "idle", phase="preparing" if batch else "done", error="", updated_at=now())
             save()
         return True
@@ -1430,62 +1485,134 @@ def execute_group_chat(chat_id: str, batch_id: str) -> None:
         chat = find_chat(chat_id)
         current = dict(chat["batch"])
         members = list(chat.get("members", AGENTS))
-    queue = [{"agent": a, "from": "用户"} for a in current["recipients"]]
-    processed, completed = 0, 0
+    participants = list(dict.fromkeys(current["recipients"]))
+    discussion = current.get("rounds", 0) > 0 and not current.get("directed", False)
+    requested_rounds = max(1, current.get("rounds", 0)) if discussion else 1
+    max_replies = min(6, current["max_replies"])
+    active, skipped = list(participants), []
+    processed, completed, completed_rounds = 0, 0, 0
+    end_reason, finish_detail = "round_limit", "已达到所选讨论轮数上限。"
     try:
-        while queue and processed < current["max_replies"]:
-            with LOCK:
-                chat = find_chat(chat_id)
-                if chat.get("stop_requested"):
-                    raise RuntimeError("已停止群聊，本批次不再调用其他Agent")
-            if time.monotonic() >= deadline:
-                raise RuntimeError("群聊已达25分钟时限")
-            item = queue.pop(0)
-            agent = item["agent"]
-            processed += 1
-            with LOCK:
-                chat["batch"].update(processed=processed, active_agent=agent, pending=[q["agent"] for q in queue])
-                save()
-            if agent == "codex":
-                try:
-                    guard_codex_chat_budget()
-                except ValueError as exc:
+        with LOCK:
+            chat["batch"].update(requested_rounds=requested_rounds, round=0, completed_rounds=0,
+                                 end_reason="", finish_detail="", skipped_agents=[])
+            save()
+        for round_number in range(1, requested_rounds + 1):
+            if processed >= max_replies:
+                end_reason, finish_detail = "reply_limit", "已达到本批次最多6次回复的上限，未再安排后续轮次。"
+                break
+            round_members = list(active)
+            replied, done_agents = [], []
+            round_skipped, partial_round = False, False
+            for index, agent in enumerate(round_members):
+                if processed >= max_replies:
+                    partial_round = True
+                    end_reason, finish_detail = "reply_limit", "已达到本批次最多6次回复的上限，本轮尚未全部完成。"
+                    break
+                with LOCK:
+                    chat = find_chat(chat_id)
+                    if chat.get("stop_requested"):
+                        end_reason = "stopped"
+                        raise RuntimeError("已停止群聊，本批次不再调用其他Agent")
+                if time.monotonic() >= deadline:
+                    end_reason = "deadline"
+                    raise RuntimeError("群聊已达25分钟时限")
+                processed += 1
+                pending = (round_members[index + 1:] + active * (requested_rounds - round_number))[:max_replies - processed]
+                with LOCK:
+                    chat["batch"].update(processed=processed, active_agent=agent, pending=pending, round=round_number)
+                    save()
+                if agent == "codex":
+                    try:
+                        guard_codex_chat_budget()
+                    except ValueError as exc:
+                        round_skipped = True
+                        if agent in active:
+                            active.remove(agent)
+                        if agent not in skipped:
+                            skipped.append(agent)
+                        with LOCK:
+                            chat["messages"].append({"role": "system", "text": f"本批次跳过 Codex：{exc}", "created_at": now()})
+                            chat["batch"]["skipped_agents"] = list(skipped)
+                            save()
+                        continue
+                turn_id = uuid.uuid4().hex[:12]
+                with LOCK:
+                    chat.update(agent=agent, turn_id=turn_id)
+                    save()
+                batch_info = {"id": batch_id, "members": members, "step": processed,
+                              "remaining": max_replies - processed, "discussion": discussion,
+                              "round": round_number, "requested_rounds": requested_rounds,
+                              "invited_by": "用户" if round_number == 1 else "Python群聊调度",
+                              "user_message": current["user_message"]}
+                if not execute_chat(chat_id, turn_id, batch_info, deadline):
                     with LOCK:
-                        chat["messages"].append({"role": "system", "text": f"本批次跳过 Codex：{exc}", "created_at": now()})
-                        save()
-                    continue
-            turn_id = uuid.uuid4().hex[:12]
+                        failed_chat = find_chat(chat_id)
+                        stopped = failed_chat.get("stop_requested")
+                        failure = failed_chat.get("error") or "群聊回复失败"
+                    end_reason = "stopped" if stopped else "deadline" if time.monotonic() >= deadline else "reply_failed"
+                    raise RuntimeError(failure)
+                completed += 1
+                replied.append(agent)
+                with LOCK:
+                    chat["batch"]["completed"] = completed
+                    reply = chat["messages"][-1]
+                    if reply.get("discussion_done") is True:
+                        done_agents.append(agent)
+                    if chat.get("stop_requested"):
+                        end_reason = "stopped"
+                        raise RuntimeError("已停止群聊，本批次不再调用其他Agent")
+                    save()
+            complete_round = not round_skipped and not partial_round and len(replied) == len(round_members)
+            if complete_round:
+                completed_rounds += 1
             with LOCK:
-                chat.update(agent=agent, turn_id=turn_id)
+                chat["batch"]["completed_rounds"] = completed_rounds
                 save()
-            batch_info = {"id": batch_id, "members": members, "step": processed,
-                          "remaining": current["max_replies"] - processed,
-                          "discussion": current["rounds"] > 0 and not current["directed"], "invited_by": item["from"],
-                          "user_message": current["user_message"]}
-            if not execute_chat(chat_id, turn_id, batch_info, deadline):
-                raise RuntimeError(find_chat(chat_id).get("error") or "群聊回复失败")
-            completed += 1
-            with LOCK:
-                chat["batch"]["completed"] = completed
-                handoff = chat["messages"][-1].get("handoff_to")
-                save()
-            if (batch_info["discussion"] and handoff in members and handoff != agent
-                    and not any(q["agent"] == handoff for q in queue) and processed < current["max_replies"]):
-                queue.append({"agent": handoff, "from": agent})
+            if discussion and complete_round and round_members and len(done_agents) == len(round_members):
+                if skipped:
+                    end_reason, finish_detail = "quota_limited", "可用成员本轮均表示可以结束；Codex因额度限制未完成原定参与轮次。"
+                else:
+                    end_reason = "agents_done"
+                    finish_detail = ("本轮所有成员均明确表示可以结束，已提前停止后续轮次。"
+                                     if round_number < requested_rounds else "本轮所有成员均明确表示可以结束；本批次已结束。")
+                break
+            if skipped and len(active) < 2:
+                end_reason, finish_detail = "quota_limited", "Codex因额度限制被跳过；当前不足两位成员，不再安排单个Agent重复自答。已保留成功回复。"
+                break
+            if partial_round:
+                break
+        if skipped and end_reason in ("round_limit", "reply_limit"):
+            end_reason, finish_detail = "quota_limited", "额度限制使本批次未能完成原定成员轮次，已保留成功回复。"
+        if not discussion and not skipped:
+            if current.get("directed"):
+                end_reason, finish_detail = "directed_complete", "定向消息已由指定Agent完成回复，未调用其他成员。"
+            else:
+                end_reason, finish_detail = "broadcast_complete", "本次广播已由各受邀成员回复一次。"
         with LOCK:
             chat = find_chat(chat_id)
             if chat.get("stop_requested"):
+                end_reason = "stopped"
                 raise RuntimeError("已停止群聊")
             if not completed:
+                if end_reason != "quota_limited":
+                    end_reason = "reply_failed"
                 raise RuntimeError("没有Agent完成回复，请检查额度和执行器")
-            chat.update(status="idle", error="", updated_at=now())
-            chat["batch"].update(status="done", active_agent=None, pending=[], ended_at=now())
+            chat.update(status="idle", phase="done", error="", updated_at=now())
+            chat["batch"].update(status="done", active_agent=None, pending=[], ended_at=now(),
+                                 end_reason=end_reason, finish_detail=finish_detail, completed_rounds=completed_rounds)
             save()
     except Exception as exc:
         with LOCK:
             chat = find_chat(chat_id)
-            chat.update(status="error", error=str(exc), updated_at=now())
-            chat["batch"].update(status="stopped" if chat.get("stop_requested") else "error", active_agent=None, pending=[], ended_at=now())
+            if chat.get("stop_requested"):
+                end_reason = "stopped"
+            elif end_reason not in ("deadline", "reply_failed", "quota_limited"):
+                end_reason = "reply_failed"
+            chat.update(status="error", phase="error", error=str(exc), updated_at=now())
+            chat["batch"].update(status="stopped" if chat.get("stop_requested") else "error", active_agent=None,
+                                 pending=[], ended_at=now(), end_reason=end_reason, finish_detail=str(exc),
+                                 completed_rounds=completed_rounds)
             save()
 
 
@@ -1526,9 +1653,32 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("请求格式无效")
         return data
 
+    def request_host_allowed(self) -> bool:
+        expected = getattr(self.server, "phone_origin", "")
+        host = urlparse(expected).netloc if expected else f"127.0.0.1:{self.server.server_port}"
+        return self.headers.get("Host", "") == host
+
+    def desktop_only(self) -> bool:
+        return not getattr(self.server, "phone_remote", False) and self.client_address[0] in ("127.0.0.1", "::1")
+
     def do_GET(self) -> None:
+        if not self.request_host_allowed():
+            self.response(403, {"error": "看板访问地址无效"})
+            return
         parsed = urlparse(self.path)
         path = parsed.path
+        if path == "/phone/client":
+            self.response(200, {"remote": False})
+            return
+        if path == "/api/phone-access":
+            if not self.desktop_only():
+                self.response(403, {"error": "请在电脑上管理手机访问"})
+                return
+            self.response(200, phone_access_status())
+            return
+        if path == "/api/project-defaults":
+            self.response(200, {"managed_projects_directory": str(MANAGED_PROJECTS)})
+            return
         if path == "/api/health":
             self.response(200, {"app": "AgentBoard", "version": APP_VERSION, "pid": os.getpid(),
                                 "process_stamp": process_stamp(os.getpid()), "ready": True})
@@ -1693,8 +1843,12 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self) -> None:
+        if not self.request_host_allowed():
+            self.response(403, {"error": "看板访问地址无效"})
+            return
         origin = self.headers.get("Origin")
-        if origin and origin != f"http://127.0.0.1:{self.server.server_port}":
+        expected_origin = getattr(self.server, "phone_origin", f"http://127.0.0.1:{self.server.server_port}")
+        if origin and origin != expected_origin:
             self.response(403, {"error": "仅允许本地看板发起操作"})
             return
         path = urlparse(self.path).path
@@ -1702,7 +1856,31 @@ class Handler(BaseHTTPRequestHandler):
             body = self.read_body()
             if DEMO_MODE:
                 raise ValueError("演示模式为只读示例，不启动Agent或修改项目；请运行python launch.py使用正式看板")
-            if path == "/api/missions":
+            if path.startswith("/api/phone-access/"):
+                if not self.desktop_only():
+                    self.response(403, {"error": "请在电脑上管理手机访问"})
+                    return
+                manager = phone_access_service()
+                action = path.removeprefix("/api/phone-access/")
+                if action == "enable":
+                    result = manager.enable(address=body.get("address"), port=body.get("port", 8767))
+                elif action == "disable":
+                    result = manager.disable()
+                elif action == "code":
+                    result = manager.new_code()
+                elif action == "revoke":
+                    result = manager.revoke(str(body.get("device_id", "")))
+                elif action == "firewall":
+                    current = manager.status()
+                    if not current["running"]:
+                        raise ValueError("请先开启手机访问，再允许Windows连接")
+                    phone_firewall_service().request(port=current["port"])
+                elif action == "firewall-check":
+                    phone_firewall_service().inspect(port=manager.status()["port"])
+                else:
+                    raise ValueError("无效的手机访问操作")
+                result = phone_access_status()
+            elif path == "/api/missions":
                 result = public_mission(create_autonomous_task(body))
             elif path.startswith("/api/missions/"):
                 parts = path.split("/")
@@ -1856,6 +2034,11 @@ def main() -> None:
             autonomy_service().start()
         except Exception as exc:
             autonomy_service().error = str(exc)
+    if not DEMO_MODE:
+        try:
+            phone_access_service().restore()
+        except Exception as exc:
+            print(f"手机访问未启动，请在设置中重新开启：{exc}", flush=True)
     budget_stop = threading.Event()
     if not DEMO_MODE:
         threading.Thread(target=budget_loop, args=(budget_stop,), daemon=True).start()
@@ -1870,6 +2053,8 @@ def main() -> None:
         pass
     finally:
         budget_stop.set()
+        if _PHONE_ACCESS:
+            _PHONE_ACCESS.shutdown()
         if _AUTONOMY_SERVICE and not DEMO_MODE:
             _AUTONOMY_SERVICE.stop()
         server.server_close()

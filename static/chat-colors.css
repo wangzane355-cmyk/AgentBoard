@@ -1,0 +1,20 @@
+/* Message identity stays visible in addition to color. User/system colors are unchanged. */
+#chat-dialog .assistant[data-chat-palette="codex"] { --ai-bubble:#1d3149; --ai-line:#45658d; --ai-label:#a9cfff; }
+#chat-dialog .assistant[data-chat-palette="deepseek"] { --ai-bubble:#302540; --ai-line:#70568c; --ai-label:#d5b8fa; }
+#chat-dialog .assistant[data-chat-palette="teal"] { --ai-bubble:#173739; --ai-line:#3a7278; --ai-label:#99d9dc; }
+#chat-dialog .assistant[data-chat-palette="amber"] { --ai-bubble:#3a301e; --ai-line:#856d3f; --ai-label:#e7ca8c; }
+#chat-dialog .assistant[data-chat-palette="rose"] { --ai-bubble:#3b242d; --ai-line:#865565; --ai-label:#edbacb; }
+#chat-dialog .assistant[data-chat-palette="slate"] { --ai-bubble:#26313b; --ai-line:#607586; --ai-label:#c3d4e2; }
+:root:is([data-theme="graphite"],[data-theme="construct"]) #chat-dialog .assistant[data-chat-palette="codex"] { --ai-bubble:#e8f1ff; --ai-line:#b6ccef; --ai-label:#2f5f98; }
+:root:is([data-theme="graphite"],[data-theme="construct"]) #chat-dialog .assistant[data-chat-palette="deepseek"] { --ai-bubble:#f0eaff; --ai-line:#d0bfe7; --ai-label:#6c4b95; }
+:root:is([data-theme="graphite"],[data-theme="construct"]) #chat-dialog .assistant[data-chat-palette="teal"] { --ai-bubble:#e2f3f3; --ai-line:#9ac4c4; --ai-label:#27646b; }
+:root:is([data-theme="graphite"],[data-theme="construct"]) #chat-dialog .assistant[data-chat-palette="amber"] { --ai-bubble:#fff2dc; --ai-line:#ddc18c; --ai-label:#856326; }
+:root:is([data-theme="graphite"],[data-theme="construct"]) #chat-dialog .assistant[data-chat-palette="rose"] { --ai-bubble:#fbe9ed; --ai-line:#dfb4bf; --ai-label:#925267; }
+:root:is([data-theme="graphite"],[data-theme="construct"]) #chat-dialog .assistant[data-chat-palette="slate"] { --ai-bubble:#eaf0f4; --ai-line:#c0cdd6; --ai-label:#526876; }
+#chat-dialog .chat-message.assistant[data-chat-palette] {
+  background:var(--ai-bubble,var(--surface-message));
+  border-color:var(--ai-line,var(--line));
+  color:var(--text);
+}
+#chat-dialog .chat-message.assistant[data-chat-palette] .chat-message-label { color:var(--ai-label,var(--soft-ink)); }
+#chat-dialog .chat-message.assistant[data-chat-palette]::before { border-color:var(--ai-line,var(--line)); }

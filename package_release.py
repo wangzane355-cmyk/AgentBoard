@@ -7,10 +7,10 @@ from pathlib import Path
 
 
 PUBLIC_ROOTS = {"AGENTS.md", "README.md", "README.zh-CN.md", "CHANGELOG.md", "CONTRIBUTING.md",
-                "DEEPSEEK_HANDOFF.md", "SECURITY.md", "LICENSE", "start.cmd", ".gitignore", ".gitattributes", "browser_probe.mjs"}
+                "DEEPSEEK_HANDOFF.md", "SECURITY.md", "LICENSE", "start.cmd", ".gitignore", ".gitattributes", "browser_probe.mjs", "test_phone_login.mjs", "test_group_chat_ui.mjs"}
 PUBLIC_MODULES = set("""agent_registry agent_worker autonomy autonomy_bridge autonomy_store context_sources
 demo doctor executor_discovery group_chat launch managed_executors model_settings package_release restart_service
-server task_archive test_task_archive test_workspace_ux smoke_chat smoke_group_chat smoke_probe supervised_process usage_probe verification test_agent_registry
+server phone_access phone_firewall test_phone_firewall test_phone_access test_phone_server task_archive test_task_archive test_workspace_ux smoke_chat smoke_group_chat smoke_probe supervised_process usage_probe verification test_agent_registry
 test_autonomy test_context_sources test_executor_discovery test_group_chat test_launch test_managed_executors
 test_model_settings test_release test_server test_supervised_process test_usage_probe test_verification""".split())
 PRIVATE_NAMES = {"data", ".git", ".codex", ".dsh", "node_modules", "__pycache__", ".venv", "venv",

@@ -519,14 +519,19 @@ class BoardTests(unittest.TestCase):
         self.board.STATE["budget"] = {"codex_5h_remaining": 80, "observed_at": self.board.now()}
         return self.board.create_chat({"project_id": "test", "agent": "deepseek", "mode": "group"})
 
-    def fake_group_command(self, calls, handoff=False, fail_codex=False):
+    def fake_group_command(self, calls, handoff=False, fail_codex=False, directives=None, empty_codex=False):
         def command(task, workspace, turn):
             agent = task["agent"]
             calls.append({"agent": agent, "prompt": (turn / "prompt.txt").read_text(encoding="utf-8")})
             if fail_codex and agent == "codex":
                 return [sys.executable, "-c", "raise SystemExit(1)"]
-            reply = agent.upper() + "_SHARED_REPLY"
-            if handoff:
+            reply = "" if empty_codex and agent == "codex" else agent.upper() + "_SHARED_REPLY"
+            directive = directives(agent, len(calls)) if callable(directives) else (directives or {}).get(agent)
+            if directive == "INLINE_DONE":
+                reply += " AGENTBOARD_TO: DONE"
+            elif directive:
+                reply += "\nAGENTBOARD_TO: " + directive
+            elif handoff:
                 reply += "\nAGENTBOARD_TO: " + ("codex" if agent == "deepseek" else "deepseek")
             if agent == "codex":
                 code = f"import sys; from pathlib import Path; sys.stdin.read(); Path({str(turn / 'answer.txt')!r}).write_text({reply!r},encoding='utf-8')"
@@ -535,9 +540,9 @@ class BoardTests(unittest.TestCase):
             return [sys.executable, "-c", code]
         return command
 
-    def dispatch_group(self, chat, text, calls, **fake_options):
+    def dispatch_group(self, chat, text, calls, discussion_rounds=0, selected="all", **fake_options):
         with patch.object(self.board.threading, "Thread"), patch.object(self.board, "command_for", side_effect=self.fake_group_command(calls, **fake_options)):
-            self.board.send_chat(chat["id"], {"message": text, "agent": "all"})
+            self.board.send_chat(chat["id"], {"message": text, "agent": selected, "discussion_rounds": discussion_rounds})
             self.board.execute_group_chat(chat["id"], chat["batch"]["id"])
 
     def test_group_broadcast_shares_first_reply_with_second_agent(self):
@@ -565,6 +570,174 @@ class BoardTests(unittest.TestCase):
         self.assertEqual(chat["batch"]["completed"], 4)
         self.assertEqual(chat["status"], "idle")
 
+    def test_group_selected_rounds_continue_without_optional_handoff_markers(self):
+        for rounds in [2, 3]:
+            with self.subTest(rounds=rounds):
+                chat, calls = self.group_room(), []
+                self.dispatch_group(chat, "Review together without protocol markers", calls, discussion_rounds=rounds)
+                self.assertEqual([call["agent"] for call in calls], ["deepseek", "codex"] * rounds)
+                batch = chat["batch"]
+                self.assertEqual(batch["completed"], rounds * 2)
+                self.assertEqual(batch["requested_rounds"], rounds)
+                self.assertEqual(batch["completed_rounds"], rounds)
+                self.assertEqual(batch["round"], rounds)
+                self.assertEqual(batch["end_reason"], "round_limit")
+                self.assertEqual(chat["status"], "idle")
+                self.assertIn("CODEX_SHARED_REPLY", calls[2]["prompt"])
+                self.assertIn(f"当前为第2/{rounds}轮", calls[2]["prompt"])
+                replies = [item for item in chat["messages"] if item["role"] == "assistant"]
+                self.assertTrue(all(not item["discussion_done"] for item in replies))
+                self.assertEqual([item["discussion_round"] for item in replies], [number for number in range(1, rounds + 1) for _ in range(2)])
+
+    def test_group_explicit_discussion_overrides_body_rounds_without_handoffs(self):
+        for command in ["/讨论", "/discuss"]:
+            with self.subTest(command=command):
+                chat, calls = self.group_room(), []
+                self.dispatch_group(chat, command + " 2 Review each other", calls, discussion_rounds=3, selected="codex")
+                self.assertEqual([call["agent"] for call in calls], ["deepseek", "codex"] * 2)
+                self.assertEqual(chat["batch"]["requested_rounds"], 2)
+
+    def test_group_every_member_done_in_one_round_can_end_early(self):
+        chat, calls = self.group_room(), []
+        self.dispatch_group(chat, "Review together", calls, discussion_rounds=3,
+                            directives={"deepseek": "DONE", "codex": "DONE"})
+        self.assertEqual([call["agent"] for call in calls], ["deepseek", "codex"])
+        self.assertEqual(chat["batch"]["completed_rounds"], 1)
+        self.assertEqual(chat["batch"]["requested_rounds"], 3)
+        self.assertEqual(chat["batch"]["end_reason"], "agents_done")
+        self.assertIn("所有成员", chat["batch"]["finish_detail"])
+        self.assertTrue(all(item["discussion_done"] for item in chat["messages"] if item["role"] == "assistant"))
+
+    def test_group_one_done_member_does_not_speak_for_everyone(self):
+        chat, calls = self.group_room(), []
+        self.dispatch_group(chat, "Review together", calls, discussion_rounds=3, directives={"deepseek": "DONE"})
+        self.assertEqual(len(calls), 6)
+        self.assertEqual(chat["batch"]["end_reason"], "round_limit")
+        self.assertEqual(chat["batch"]["completed_rounds"], 3)
+
+    def test_group_done_votes_cannot_accumulate_across_different_rounds(self):
+        chat, calls = self.group_room(), []
+        self.dispatch_group(chat, "Review together", calls, discussion_rounds=3,
+                            directives=lambda agent, step: "DONE" if step in (1, 4) else None)
+        self.assertEqual(len(calls), 6)
+        self.assertEqual(chat["batch"]["end_reason"], "round_limit")
+
+    def test_group_inline_done_is_not_an_explicit_round_termination_vote(self):
+        chat, calls = self.group_room(), []
+        self.dispatch_group(chat, "Review together", calls, discussion_rounds=2,
+                            directives={"deepseek": "INLINE_DONE", "codex": "INLINE_DONE"})
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(chat["batch"]["end_reason"], "round_limit")
+        self.assertTrue(all(not item["discussion_done"] for item in chat["messages"] if item["role"] == "assistant"))
+
+    def test_group_selected_or_slash_direct_message_ignores_multiple_rounds(self):
+        for message, selected in [("Reply only", "codex"), ("/codex Reply only", "all")]:
+            with self.subTest(message=message):
+                chat, calls = self.group_room(), []
+                self.dispatch_group(chat, message, calls, discussion_rounds=3, selected=selected, handoff=True)
+                self.assertEqual([call["agent"] for call in calls], ["codex"])
+                self.assertEqual(chat["batch"]["requested_rounds"], 1)
+                self.assertEqual(chat["batch"]["end_reason"], "directed_complete")
+                self.assertIsNone(chat["messages"][-1]["handoff_to"])
+
+    def test_group_explicit_all_remains_one_broadcast_despite_selected_rounds(self):
+        chat, calls = self.group_room(), []
+        self.dispatch_group(chat, "/all Broadcast this", calls, discussion_rounds=3, handoff=True)
+        self.assertEqual([call["agent"] for call in calls], ["deepseek", "codex"])
+        self.assertEqual(chat["batch"]["rounds"], 0)
+        self.assertEqual(chat["batch"]["completed_rounds"], 1)
+        self.assertEqual(chat["batch"]["end_reason"], "broadcast_complete")
+
+    def test_group_three_members_cannot_exceed_six_replies(self):
+        self.board.save_agent({"id": "sim-three", "name": "Third simulator", "kind": "mock"})
+        self.board.STATE["budget"] = {"codex_5h_remaining": 80, "observed_at": self.board.now()}
+        chat = self.board.create_chat({"project_id": "test", "agent": "deepseek", "mode": "group",
+                                       "members": ["deepseek", "codex", "sim-three"]})
+        calls = []
+        self.dispatch_group(chat, "Review together", calls, discussion_rounds=3, handoff=True)
+        self.assertEqual([call["agent"] for call in calls], ["deepseek", "codex", "sim-three"] * 2)
+        self.assertEqual(chat["batch"]["completed"], 6)
+        self.assertEqual(chat["batch"]["completed_rounds"], 2)
+        self.assertEqual(chat["batch"]["round"], 2)
+        self.assertEqual(chat["batch"]["requested_rounds"], 3)
+        self.assertEqual(chat["batch"]["end_reason"], "reply_limit")
+
+    def test_group_quota_skip_does_not_repeat_a_single_available_member(self):
+        chat, calls = self.group_room(), []
+        self.board.STATE["budget"]["codex_5h_remaining"] = 15
+        self.dispatch_group(chat, "Review together", calls, discussion_rounds=3)
+        self.assertEqual([call["agent"] for call in calls], ["deepseek"])
+        self.assertEqual(chat["batch"]["completed"], 1)
+        self.assertEqual(chat["batch"]["completed_rounds"], 0)
+        self.assertEqual(chat["batch"]["skipped_agents"], ["codex"])
+        self.assertEqual(chat["batch"]["end_reason"], "quota_limited")
+        self.assertEqual(chat["status"], "idle")
+
+    def test_group_quota_is_rechecked_each_codex_turn_and_preserves_prior_round(self):
+        chat, calls = self.group_room(), []
+        with patch.object(self.board, "guard_codex_chat_budget", side_effect=[None, ValueError("quota fixture")]) as guard:
+            self.dispatch_group(chat, "Review together", calls, discussion_rounds=3)
+        self.assertEqual(guard.call_count, 2)
+        self.assertEqual([call["agent"] for call in calls], ["deepseek", "codex", "deepseek"])
+        self.assertEqual(chat["batch"]["completed"], 3)
+        self.assertEqual(chat["batch"]["completed_rounds"], 1)
+        self.assertEqual(chat["batch"]["end_reason"], "quota_limited")
+
+    def test_group_four_member_partial_round_does_not_claim_round_completion(self):
+        for name in ["sim-three", "sim-four"]:
+            self.board.save_agent({"id": name, "name": name, "kind": "mock"})
+        self.board.STATE["budget"] = {"codex_5h_remaining": 80, "observed_at": self.board.now()}
+        members = ["deepseek", "codex", "sim-three", "sim-four"]
+        chat = self.board.create_chat({"project_id": "test", "agent": "deepseek", "mode": "group", "members": members})
+        calls = []
+        self.dispatch_group(chat, "Review together", calls, discussion_rounds=3)
+        self.assertEqual([call["agent"] for call in calls], members + members[:2])
+        self.assertEqual(chat["batch"]["completed"], 6)
+        self.assertEqual(chat["batch"]["completed_rounds"], 1)
+        self.assertEqual(chat["batch"]["round"], 2)
+        self.assertEqual(chat["batch"]["end_reason"], "reply_limit")
+
+    def test_group_deadline_during_discussion_preserves_successful_reply(self):
+        chat = self.group_room()
+        clock = {"value": 0.0}
+        def reply(chat_id, turn_id, batch, deadline):
+            chat["messages"].append({"role": "assistant", "agent": "deepseek", "text": "completed fixture reply"})
+            clock["value"] = 1501.0
+            return True
+        with patch.object(self.board.threading, "Thread"), patch.object(self.board.time, "monotonic", side_effect=lambda: clock["value"]), patch.object(self.board, "execute_chat", side_effect=reply) as worker:
+            self.board.send_chat(chat["id"], {"message": "Review", "agent": "all", "discussion_rounds": 3})
+            self.board.execute_group_chat(chat["id"], chat["batch"]["id"])
+        self.assertEqual(worker.call_count, 1)
+        self.assertEqual(chat["batch"]["completed"], 1)
+        self.assertEqual(chat["batch"]["completed_rounds"], 0)
+        self.assertEqual(chat["batch"]["end_reason"], "deadline")
+        self.assertEqual(chat["messages"][-1]["text"], "completed fixture reply")
+
+    def test_group_one_member_discussion_is_one_broadcast_not_self_repetition(self):
+        self.board.STATE["budget"] = {"codex_5h_remaining": 80, "observed_at": self.board.now()}
+        for message in ["Review together", "/讨论 3 Review"]:
+            with self.subTest(message=message):
+                chat = self.board.create_chat({"project_id": "test", "agent": "codex", "mode": "group", "members": ["codex"]})
+                calls = []
+                self.dispatch_group(chat, message, calls, discussion_rounds=3, handoff=True)
+                self.assertEqual([call["agent"] for call in calls], ["codex"])
+                self.assertEqual(chat["batch"]["rounds"], 0)
+                self.assertEqual(chat["batch"]["requested_rounds"], 1)
+                self.assertEqual(chat["batch"]["completed_rounds"], 1)
+                self.assertEqual(chat["batch"]["max_replies"], 1)
+                self.assertEqual(chat["batch"]["end_reason"], "broadcast_complete")
+                self.assertEqual(chat["status"], "idle")
+
+    def test_group_empty_reply_stops_later_rounds_and_keeps_existing_reply(self):
+        chat, calls = self.group_room(), []
+        self.dispatch_group(chat, "Review together", calls, discussion_rounds=3, empty_codex=True)
+        self.assertEqual([call["agent"] for call in calls], ["deepseek", "codex"])
+        self.assertEqual(chat["batch"]["completed"], 1)
+        self.assertEqual(chat["batch"]["completed_rounds"], 0)
+        self.assertEqual(chat["batch"]["end_reason"], "reply_failed")
+        self.assertIn("没有返回回复", chat["error"])
+        self.assertTrue(any(item.get("agent") == "deepseek" for item in chat["messages"]))
+
     def test_group_budget_skips_codex_without_stopping_deepseek(self):
         chat, calls = self.group_room(), []
         self.board.STATE["budget"]["codex_5h_remaining"] = 15
@@ -588,6 +761,8 @@ class BoardTests(unittest.TestCase):
             self.board.execute_group_chat(chat["id"], chat["batch"]["id"])
             self.assertEqual(worker.call_count, 1)
         self.assertEqual(chat["batch"]["status"], "stopped")
+        self.assertEqual(chat["batch"]["end_reason"], "stopped")
+        self.assertEqual(chat["batch"]["completed_rounds"], 0)
 
     def test_group_failure_preserves_completed_reply(self):
         chat, calls = self.group_room(), []
@@ -603,6 +778,7 @@ class BoardTests(unittest.TestCase):
             self.board.execute_group_chat(chat["id"], chat["batch"]["id"])
             worker.assert_not_called()
         self.assertIn("25分钟", chat["error"])
+        self.assertEqual(chat["batch"]["end_reason"], "deadline")
 
 
 if __name__ == "__main__":

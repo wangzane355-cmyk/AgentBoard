@@ -163,12 +163,12 @@ Agent 群聊	Agent room
 请 Agent 整理共识	Ask agent to summarize
 查看 / 保存共识	View / save consensus
 群聊讨论上限	Room discussion limit
-最多1轮 / 2次回复	Up to 1 round / 2 replies
-最多2轮 / 4次回复	Up to 2 rounds / 4 replies
-最多3轮 / 6次回复	Up to 3 rounds / 6 replies
-让他们讨论	Let agents discuss
+讨论轮数	Rounds
+最多1轮 · 2次回复	Up to 1 round · 2 replies
+最多2轮 · 4次回复	Up to 2 rounds · 4 replies
+最多3轮 · 6次回复	Up to 3 rounds · 6 replies
 附带项目源码快照（供只读查阅）	Include a source snapshot for read-only reference
-默认携带项目名称和任务概况。历史记录自动保存；每轮携带最近最多约4.2万字。每轮最多25分钟。	Project and task context is included by default. History is saved automatically; each turn includes up to about 42,000 recent characters. Limit: 25 minutes per turn.
+默认携带项目名称和任务概况。历史记录自动保存；每次回复携带最近最多约4.2万字。每批讨论最多25分钟。	Project and task context is included by default. History is saved automatically; each reply includes up to about 42,000 recent characters. Limit: 25 minutes per discussion batch.
 转成任务卡	Create task draft
 更新关联任务	Update linked task
 历史对话	Chat history
@@ -268,7 +268,6 @@ Python监督	Python supervisor
 Agent 正在回复，关闭面板后仍会继续。	Agent is replying; closing this panel does not stop it.
 已关联到这张任务，之前的讨论会保留。	Task linked; previous discussion is preserved.
 正在读取这段对话，请稍后发送。	Loading the conversation; please send again shortly.
-这是一条定向消息，请直接发送；需要群聊讨论时再使用 /讨论。	This message is directed to one agent. Send it directly; use /discuss for a group discussion.
 当前共识已保存，更新关联任务后会带入执行。	Consensus saved; it will be included when the linked task is updated.
 已填入任务草稿；补齐范围和验收条件后创建。	Draft prepared. Set scope and acceptance rules before creating the task.
 资料关联已保存，下次讨论和派工会自动重新读取。	References saved; they will be refreshed before the next discussion or task.
@@ -311,7 +310,7 @@ Agent 正在回复，关闭面板后仍会继续。	Agent is replying; closing t
     return result === undefined ? value : value.slice(0, value.indexOf(text)) + result + value.slice(value.indexOf(text) + text.length);
   }
   // Exclude all user-authored content, source paths, result bodies and logs.
-  const protectedContent = '[data-chat-user-value],[data-trash-user-value],[data-model-value], [data-agent-name],[data-agent-option],#agent-status,#chat-room-members label,#group-chat-help,#project-nav,#project-title,#chat-project-name,#context-project-title,.card-title,.card-description,.card-error,.detail-desc,#drawer-body>h2,.chat-session>strong,.chat-message>div:not(.chat-message-label),.result-box,textarea,input,pre,code,figcaption,.tag-list,.decision-panel p,.decision-options,#task-project option,#chat-task option:not([value=""]),#mission-project option,.mission-card-title h4,.mission-card-goal,.mission-detail-head h2,.mission-goal-block>p,.mission-plan,.delivery-receipt p,.review-finding p';
+  const protectedContent = '[data-phone-user-value],[data-chat-user-value],[data-trash-user-value],[data-model-value], [data-agent-name],[data-agent-option],#agent-status,#chat-room-members label,#group-chat-help,#project-nav,#project-title,#chat-project-name,#context-project-title,.card-title,.card-description,.card-error,.detail-desc,#drawer-body>h2,.chat-session>strong,.chat-message>div:not(.chat-message-label),.result-box,textarea,input,pre,code,figcaption,.tag-list,.decision-panel p,.decision-options,#task-project option,#chat-task option:not([value=""]),#mission-project option,.mission-card-title h4,.mission-card-goal,.mission-detail-head h2,.mission-goal-block>p,.mission-plan,.delivery-receipt p,.review-finding p';
   const textSources = new WeakMap(), attributeSources = new WeakMap();
   function localizeText(node) {
     if (!node.parentElement || node.parentElement.closest(`script,style,${protectedContent}`)) return;

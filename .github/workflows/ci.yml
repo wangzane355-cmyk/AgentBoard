@@ -28,4 +28,11 @@ jobs:
       - run: node --check static/appearance.js
       - run: node --check static/i18n.js
       - run: node --check static/chat.js
+      - run: node --check static/chat-mobile.js
+      - run: node --check static/mobile-workspace.js
+      - run: node --check static/chat-routing.js
+      - run: node --check static/phone.js
+      - run: node --check static/phone-login.js
+      - run: node --test test_phone_login.mjs
+      - run: node --test test_group_chat_ui.mjs
       - run: node --check static/context.js

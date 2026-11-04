@@ -152,6 +152,18 @@ class LauncherTests(unittest.TestCase):
         self.assertIs(options["stdout"], options["stderr"])
         self.assertEqual(Path(options["stdout"].name), self.data / "launcher.log")
 
+    def test_windowless_entry_keeps_background_program_stable_for_phone_firewall(self):
+        windowed = self.data / "pythonw.exe"
+        console = self.data / "python.exe"
+        for sibling_exists in (False, True):
+            with self.subTest(sibling_exists=sibling_exists):
+                if sibling_exists:
+                    console.write_bytes(b"fixture - never executed")
+                with patch.object(launch.sys, "executable", str(windowed)), patch.object(launch.subprocess, "Popen") as popen:
+                    launch.start_background(9876, self.data)
+                self.assertEqual(popen.call_args.args[0][0], str(console if sibling_exists else windowed))
+                self.assertEqual(popen.call_args.kwargs["creationflags"], subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+
     def test_main_reports_startup_error_visibly_and_closes_progress(self):
         with patch.object(launch, "StartupProgress") as progress, patch.object(launch, "prepare_windowless_logging"), patch.object(launch, "ensure_running", side_effect=launch.StartupError("fixture failure")), patch.object(launch, "show_error") as error, patch.object(launch.webbrowser, "open") as browser:
             self.assertEqual(launch.main(), 1)

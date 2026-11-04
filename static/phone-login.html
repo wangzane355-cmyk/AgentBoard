@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light">
+  <title>AgentBoard · 手机配对</title>
+  <link rel="stylesheet" href="/static/phone-login.css">
+  <script src="/static/phone-login.js" defer></script>
+</head>
+<body>
+  <main class="pair-shell">
+    <header class="pair-brand"><span class="pair-mark" aria-hidden="true">A</span><div><strong>AgentBoard</strong><span data-pair-copy="brandNote">你的工作区，随身继续</span></div><select id="pair-language" aria-label="Language / 界面语言"><option value="zh-CN">中文</option><option value="en">English</option></select></header>
+    <section class="pair-card" aria-labelledby="pair-title">
+      <span class="pair-device" aria-hidden="true"><span></span></span>
+      <p class="pair-eyebrow">YOUR CONNECTED WORKSPACE</p>
+      <h1 id="pair-title" data-pair-copy="title">连接电脑上的 AgentBoard</h1>
+      <p class="pair-intro" data-pair-copy="intro">先在电脑打开“设置 → 手机访问”，再输入那里显示的 8 位一次配对码。</p>
+      <form id="pair-form" method="post" action="/phone/pair">
+        <label for="pair-code" data-pair-copy="codeLabel">一次配对码</label>
+        <input id="pair-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="9" pattern="[0-9 ]{8,9}" placeholder="0000 0000" required spellcheck="false" autocapitalize="off" enterkeyhint="next" aria-describedby="pair-code-help">
+        <p id="pair-code-help" class="pair-field-help" data-pair-copy="codeHelp">配对码只用一次，不是你的账号密码。</p>
+        <label for="pair-device-name" class="pair-name-label"><span data-pair-copy="nameLabel">这台手机的名称</span><span data-pair-copy="optional">可选</span></label>
+        <input id="pair-device-name" name="device_name" type="text" maxlength="64" autocomplete="off" placeholder="例如：我的安卓手机" enterkeyhint="go">
+        <p id="pair-error" class="pair-error" role="alert" hidden></p>
+        <button id="pair-submit" type="submit" data-pair-copy="submit">配对并打开工作区 ↗</button>
+        <p id="pair-status" class="pair-status" role="status"></p>
+      </form>
+      <div class="pair-requirements"><span aria-hidden="true">◇</span><p data-pair-copy="requirements">手机和电脑需连接同一个家庭 Wi-Fi，电脑上的 AgentBoard 需要保持运行。</p></div>
+    </section>
+    <p class="pair-footer" data-pair-copy="privacy">只在可信任的 Wi-Fi 使用。此连接使用 HTTP，没有 TLS 加密。无需安装 App 或注册新账号。</p>
+  </main>
+  <noscript>请开启浏览器 JavaScript 后再配对。 / Enable JavaScript to pair this phone.</noscript>
+</body>
+</html>

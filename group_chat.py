@@ -27,7 +27,9 @@ def route_message(text: str, mode: str, selected: str, members: list[str], round
             if mode != "group":
                 raise ValueError("请先新建Agent群聊，再使用全体或讨论命令")
             recipients, directed = list(members), False
-            if command != "/all":
+            if command == "/all":
+                rounds = 0  # Explicit broadcast is one reply per member.
+            else:
                 parts = content.split(maxsplit=1)
                 if parts and parts[0].isdigit():
                     rounds = int(parts[0])
@@ -45,24 +47,33 @@ def route_message(text: str, mode: str, selected: str, members: list[str], round
         raise ValueError("单聊请选择一个Agent")
     if not recipients or any(agent not in members or agent not in agents for agent in recipients):
         raise ValueError("指定Agent不在这个房间中")
-    if directed:
-        rounds = 0  # Direct messages always get exactly one scheduled responder.
+    recipients = list(dict.fromkeys(recipients))
+    if directed or len(recipients) == 1:
+        # A directed message or a one-member room gets one response, never
+        # repeated self-discussion under a multi-round selection.
+        rounds = 0
     return {"recipients": recipients, "directed": directed, "rounds": rounds,
             "max_replies": min(6, len(recipients) * max(1, rounds))}
 
 
-def strip_handoff(answer: str, sender: str, members: list[str]) -> tuple[str, str | None]:
+def parse_reply_directive(answer: str, sender: str, members: list[str]) -> tuple[str, str | None, bool]:
+    """Parse an optional final directive; missing/inline markers never mean DONE."""
     lines = answer.rstrip().splitlines()
-    recipient = None
+    recipient, done = None, False
     if lines:
         match = re.fullmatch(r"AGENTBOARD_TO:\s*([a-z][a-z0-9_-]{1,31}|DONE)", lines[-1].strip())
         if match:
             target = match.group(1)
+            done = target == "DONE"
             if target in members and target != sender:
                 recipient = target
             lines.pop()
     cleaned = "\n".join(lines).strip()
-    # A terminal DONE marker is harmless even when the model omits its newline.
-    # Only a standalone valid recipient marker is ever allowed to schedule a call.
+    # Preserve old rendering without treating an inline marker as a round vote.
     cleaned = re.sub(r"\s*AGENTBOARD_TO:\s*DONE\s*$", "", cleaned).rstrip()
+    return cleaned, recipient, done
+
+
+def strip_handoff(answer: str, sender: str, members: list[str]) -> tuple[str, str | None]:
+    cleaned, recipient, _ = parse_reply_directive(answer, sender, members)
     return cleaned, recipient

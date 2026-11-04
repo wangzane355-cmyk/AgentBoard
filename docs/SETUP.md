@@ -75,6 +75,34 @@ The desktop launcher opens a ready AgentBoard immediately, or starts one hidden 
 
 The launcher uses its current Python executable and a fixed application directory. The command-file fallback prefers the installed Python launcher (`py -3`), then `python`.
 
+## Android phone / 安卓手机（同一 Wi-Fi）
+
+**已包含在 2026-11-04 本次源码更新中；安卓 Chrome 实机配对和进入工作区已确认。** 本次工作区已通过 250 项 Python 离线测试和 51 项 JavaScript 回归，手机新布局完成了浏览器检查，触摸与软键盘手感仍待实机确认。源码提交不代表新的安装包、正式 Release 或标签。
+
+首次配对需要在电脑操作一次：
+
+1. 正常启动 AgentBoard，电脑访问 **http://127.0.0.1:8765/**。
+2. 打开 **设置 → 手机访问**，明确开启第二个私有 IP 入口，默认端口 **8767**。主入口仍只供本机使用，不改为全网监听。若提示没有 Windows 许可，点 **允许 Windows 手机连接**，在管理员确认窗口点 **是**；界面会重新检查实际规则。
+3. 让安卓手机与电脑连接同一个可信 Wi-Fi。在手机浏览器输入设置中显示的地址，例如 **http://192.168.1.20:8767/**。示例地址请换成电脑实际显示的地址，手机不能用 127.0.0.1 访问电脑。
+4. 在手机输入电脑显示的 **8 位单次配对码**，5 分钟内完成。过期后重新生成，不要把配对码发给别人。
+
+配对成功后，该设备可保持登录 30 天；电脑可撤销单台设备。关闭手机访问会立即撤销所有配对设备，再次开启后需重新配对。关闭手机网页不会停止任务，也不会撤销设备授权。
+
+手机可自由讨论、选择已有项目，也可新建项目并让电脑自动创建文件夹，不必在手机上输入电脑目录。需要指定已有电脑目录时，可先在电脑添加项目，再在手机选择它。后台重启、执行器配置和电脑原生路径选择仍在电脑完成。
+
+电脑必须开机、不睡眠，AgentBoard 后台必须运行。电脑重启后先重新启动 AgentBoard；本版不会自动安装开机系统服务。
+
+**只用于可信 Wi-Fi。当前使用 HTTP；配对不是传输加密。不支持公网、路由器端口转发或把电脑暴露到互联网。**
+
+连不上时按顺序检查：
+
+- 地址是否与电脑当前显示的一致，手机是否真的连到同一个 Wi-Fi；电脑换网络后地址可能变化。
+- 手机访问是否开启，电脑是否仍开机且后台运行。
+- Windows 是否拦截了这个入口。可能需要一次防火墙授权，具体以本机检查与提示为准；只为实际使用的 Python 程序、TCP 端口和本地网段放行，适用网络配置应与当前连接一致。不要关闭整个防火墙，也不要添加所有程序、所有端口、所有网络都能访问的规则。
+- 公寓或公共 Wi-Fi 可能禁止设备互相访问。此时正确放行防火墙也可能无效，可改用自己的私人路由器，或后续配置专门的私有网络；不要用公网端口转发绕过。
+
+安全边界见 [SECURITY.md](../SECURITY.md)。
+
 ## Troubleshooting
 
 - **Command not found:** check PATH and restart the terminal/app after installing a CLI.
@@ -82,6 +110,6 @@ The launcher uses its current Python executable and a fixed application director
 - **Codex blocked:** inspect the quota error, account login and `codex app-server` availability.
 - **Reference read failure:** correct the local path or page URL. The app will not silently substitute stale references.
 - **Source changed since the task ran:** rerun the task against the current source to avoid overwriting newer edits.
-- **Port already occupied:** `launch.py` opens the existing board only after its page responds normally. Make sure it is your AgentBoard service; you can run `python server.py --port 8767` separately.
+- **Port already occupied:** `launch.py` opens the existing board only after its page responds normally. Make sure it is your AgentBoard service; choose an unused local port if you need a separate instance; the optional phone listener normally uses 8767.
 
 Windows is the primary manually verified platform. Report your OS, Python/CLI versions and a redacted error when asking for help.

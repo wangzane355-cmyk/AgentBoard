@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>AgentBoard · 本地任务调度</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/mobile.css">
@@ -10,6 +10,10 @@
   <link rel="stylesheet" href="/static/chat.css">
   <link rel="stylesheet" href="/static/themes.css">
   <link rel="stylesheet" href="/static/workspace.css">
+  <link rel="stylesheet" href="/static/phone.css">
+  <link rel="stylesheet" href="/static/chat-mobile.css">
+  <link rel="stylesheet" href="/static/chat-colors.css">
+  <link rel="stylesheet" href="/static/mobile-workspace.css">
   <script src="/static/appearance.js"></script>
 </head>
 <body>
@@ -105,6 +109,12 @@
   </dialog>
   <dialog id="chat-dialog" class="dialog chat-dialog">
     <div class="dialog-head"><div><span class="eyebrow">AGENT CHAT</span><h2>Agent 对话</h2></div><button type="button" class="icon-btn close-dialog" aria-label="关闭对话">×</button></div>
+    <div id="chat-mobile-bar" class="chat-mobile-bar">
+      <button id="chat-mobile-back" type="button" class="chat-mobile-icon" aria-label="返回工作区" title="返回工作区"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="chat-mobile-heading"><strong id="chat-mobile-title" data-chat-user-value>Agent 对话</strong><span id="chat-mobile-subtitle" data-chat-user-value></span></div>
+      <button id="chat-mobile-options" type="button" class="chat-mobile-icon" aria-label="项目与会话设置" aria-expanded="false" aria-controls="chat-settings"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg></button>
+    </div>
+    <div class="chat-mobile-panel-tools"><label><span data-chat-zh="界面语言" data-chat-en="Language">界面语言</span><select data-language aria-label="Language / 界面语言"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></div>
     <div class="chat-scope-bar">
       <label class="chat-scope-control"><span data-chat-zh="这次聊什么" data-chat-en="Conversation scope">这次聊什么</span><select id="chat-scope" aria-label="Conversation scope / 讨论范围"><option value="">自由讨论（暂不关联项目）</option></select></label>
       <button id="chat-new-project" type="button" class="ghost" data-chat-zh="＋ 新建项目" data-chat-en="＋ New project">＋ 新建项目</button>
@@ -119,13 +129,13 @@
         <div class="chat-project-label"><span class="eyebrow" data-chat-zh="讨论范围" data-chat-en="CONVERSATION SCOPE">讨论范围</span><strong id="chat-project-name" data-chat-user-value></strong></div>
         <div class="chat-mode-controls"><label>聊天方式<select id="chat-mode" aria-label="聊天方式"><option value="single">单聊</option><option value="group">Agent 群聊</option></select></label><label>回复对象<select id="chat-agent" aria-label="对话执行者"><option value="all" hidden>发给全体</option><option value="codex" selected>Codex</option><option value="deepseek">DeepSeek</option></select></label></div>
         <fieldset id="chat-room-members" class="hidden"></fieldset>
-        <div id="group-chat-help" class="group-chat-help hidden">成员：DeepSeek · Codex。普通消息全体回复；<code>/codex</code> 或 <code>/deepseek</code> 仅指定AI回复。所有消息在房间内共享。</div>
+        <div id="group-chat-help" class="group-chat-help hidden">普通发送按所选轮数讨论；<code>/all</code> 让每位成员回复一次；<code>/codex</code> 或 <code>/deepseek</code> 仅指定成员回复一次。所有消息在房间内共享。</div>
         <div class="chat-focus-panel"><div><strong id="chat-focus-title"></strong><div class="hint">自动带入已关联日志、任务目标、依赖和进度，无需重新介绍。</div></div><button id="chat-start-plan" type="button" class="soft">帮我判断下一步</button></div>
         <label class="chat-task-label">关联任务<select id="chat-task" aria-label="关联任务"></select></label>
-        <div class="chat-reference-actions"><button id="chat-organize" type="button" class="ghost">请 Agent 整理共识</button><button id="chat-consensus" type="button" class="ghost">查看 / 保存共识</button><span id="group-discussion-controls" class="group-discussion-controls hidden"><select id="group-rounds" aria-label="群聊讨论上限"><option value="1">最多1轮 / 2次回复</option><option value="2" selected>最多2轮 / 4次回复</option><option value="3">最多3轮 / 6次回复</option></select><button id="chat-discuss" type="button" class="soft">让他们讨论</button></span></div>
+        <div class="chat-reference-actions"><button id="chat-organize" type="button" class="ghost">请 Agent 整理共识</button><button id="chat-consensus" type="button" class="ghost">查看 / 保存共识</button></div>
         <div id="chat-reference-status" class="hint"></div>
         <label id="chat-source-label" class="chat-source"><input id="chat-source" type="checkbox"> 附带项目源码快照（供只读查阅）</label>
-        <div id="chat-context-note" class="hint">默认携带项目名称和任务概况。历史记录自动保存；每轮携带最近最多约4.2万字。每轮最多25分钟。</div>
+        <div id="chat-context-note" class="hint">默认携带项目名称和任务概况。历史记录自动保存；每次回复携带最近最多约4.2万字。每批讨论最多25分钟。</div>
         <button id="chat-to-task" class="soft" disabled>转成任务卡</button>
         <div class="chat-history-head"><span class="eyebrow">历史对话</span><button id="new-chat" class="ghost">＋ 新对话</button></div>
         <div id="chat-sessions"></div>
@@ -136,6 +146,7 @@
         <div class="chat-reading-head"><strong>聊天记录</strong><span>AgentBoard</span></div>
         <div id="chat-messages" class="chat-messages" role="log" aria-label="对话记录"></div>
         <div id="chat-status" class="chat-status" role="status"></div>
+        <div class="chat-send-context"><strong id="chat-send-summary" data-chat-user-value role="status"></strong><span id="group-discussion-controls" class="group-discussion-controls hidden"><label for="group-rounds" data-chat-zh="讨论轮数" data-chat-en="Rounds">讨论轮数</label><select id="group-rounds" aria-label="群聊讨论上限"><option value="1">最多1轮 · 2次回复</option><option value="2" selected>最多2轮 · 4次回复</option><option value="3">最多3轮 · 6次回复</option></select></span><small id="chat-send-limit-note" class="hidden"></small></div>
         <form id="chat-form"><textarea id="chat-input" rows="3" maxlength="12000" placeholder="先聊想法、问问题，或一起整理下一张任务卡…" aria-label="发送给 Agent 的消息" required></textarea><div class="chat-compose-actions"><span class="hint">Ctrl / ⌘ + Enter 发送</span><button id="chat-stop" type="button" class="danger hidden">停止回复</button><button id="chat-send" type="submit" class="primary">发送</button></div></form>
       </section>
     </div>
@@ -154,9 +165,11 @@
       <div class="dialog-head"><h2 id="chat-project-create-title">新建项目</h2><button type="button" class="icon-btn" data-chat-close="chat-project-create-dialog" aria-label="Close / 关闭">×</button></div>
       <p id="chat-project-create-note" class="hint"></p>
       <label><span data-chat-zh="项目名称" data-chat-en="Project name">项目名称</span><input name="name" maxlength="100" required autocomplete="off"></label>
-      <label><span data-chat-zh="本机项目文件夹完整地址" data-chat-en="Full local project folder path">本机项目文件夹完整地址</span><input name="path" required autocomplete="off" placeholder="D:\Projects\MyIdea"></label>
-      <label class="checkline"><input name="create_directory" type="checkbox"><span data-chat-zh="这个地址还不存在，为我创建新文件夹" data-chat-en="Create a new folder if this path does not exist">这个地址还不存在，为我创建新文件夹</span></label>
-      <p class="hint" data-chat-zh="使用已有文件夹时不用勾选。创建项目不会启动模型或开发任务。" data-chat-en="Leave unchecked for an existing folder. Creating a project does not start a model or implementation task.">使用已有文件夹时不用勾选。创建项目不会启动模型或开发任务。</p>
+      <label><span data-chat-zh="项目文件夹" data-chat-en="Project folder">项目文件夹</span><select name="folder_mode" id="chat-project-folder-mode"><option value="auto" data-chat-zh="由电脑自动创建文件夹" data-chat-en="Create a folder on the computer">由电脑自动创建文件夹</option><option value="custom" selected data-chat-zh="使用指定文件夹" data-chat-en="Use a specific folder">使用指定文件夹</option></select></label>
+      <p id="chat-project-auto-folder" class="hint hidden" data-chat-zh="电脑会在 AgentBoardProjects 下创建独立文件夹。手机上不用填写电脑路径。" data-chat-en="The computer creates a separate folder under AgentBoardProjects. No computer path is needed on your phone.">电脑会在 AgentBoardProjects 下创建独立文件夹。手机上不用填写电脑路径。</p>
+      <div id="chat-project-custom-folder"><label><span data-chat-zh="本机项目文件夹完整地址" data-chat-en="Full local project folder path">本机项目文件夹完整地址</span><input name="path" required autocomplete="off" placeholder="D:\Projects\MyIdea"></label>
+      <label class="checkline"><input name="create_directory" type="checkbox"><span data-chat-zh="这个地址还不存在，为我创建新文件夹" data-chat-en="Create a new folder if this path does not exist">这个地址还不存在，为我创建新文件夹</span></label></div>
+      <p id="chat-project-folder-note" class="hint" data-chat-zh="使用已有文件夹时不用勾选。创建项目不会启动模型或开发任务。" data-chat-en="Leave unchecked for an existing folder. Creating a project does not start a model or implementation task.">使用已有文件夹时不用勾选。创建项目不会启动模型或开发任务。</p>
       <p id="chat-project-create-error" class="chat-form-error hidden" role="alert"></p>
       <div class="dialog-foot"><button type="button" class="ghost" data-chat-close="chat-project-create-dialog" data-chat-zh="取消" data-chat-en="Cancel">取消</button><button id="chat-project-create-submit" type="submit" class="primary">创建项目</button></div>
     </form>
@@ -207,11 +220,15 @@
   <div id="toast" class="toast hidden" role="status"></div>
   <script src="/static/i18n.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/chat-routing.js"></script>
   <script src="/static/chat.js"></script>
   <script src="/static/context.js"></script>
   <script src="/static/models.js"></script>
   <script src="/static/agents.js"></script>
   <script src="/static/executors.js"></script>
   <script src="/static/autonomy.js"></script>
+  <script src="/static/phone.js"></script>
+  <script src="/static/chat-mobile.js"></script>
+  <script src="/static/mobile-workspace.js"></script>
 </body>
 </html>

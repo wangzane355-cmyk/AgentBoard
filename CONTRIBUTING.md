@@ -7,6 +7,7 @@ Contributions that make local agent coordination clearer, easier to verify and l
 ```bash
 python demo.py
 python -m unittest discover -v
+node --test test_phone_login.mjs test_group_chat_ui.mjs
 node --check static/autonomy.js
 node --check static/models.js
 node --check static/appearance.js
@@ -15,6 +16,9 @@ node --check static/agents.js
 node --check static/i18n.js
 node --check static/app.js
 node --check static/chat.js
+node --check static/chat-mobile.js
+node --check static/mobile-workspace.js
+node --check static/chat-routing.js
 node --check static/context.js
 ```
 

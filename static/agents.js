@@ -36,12 +36,13 @@ function renderRoomMembers(){
   }
   const allowed=currentChat?chatData?.members:null;
   const members=allowed || selectedMembers();
-  $('#group-chat-help').textContent=say('成员：','Members: ')+members.map(profileName).join(' · ')+say('。/成员ID 定向回复，/all 全体回复，最多六次回复。',' · /agent-id addresses one member; /all invites everyone. Up to six replies.');
-  for(const option of $('#group-rounds').options){const n=Number(option.value),count=Math.min(6,members.length*n);option.textContent=say(`最多${n}轮 / ${count}次回复`,`Up to ${n} ${n===1?'round':'rounds'} / ${count} ${count===1?'reply':'replies'}`);}
+  $('#group-chat-help').textContent=say('成员：','Members: ')+members.map(profileName).join(' · ')+say('。普通发送按所选轮数讨论；/all 每位回复一次；/成员ID 仅指定成员回复一次。最多六次回复，成员表示结束或遇到限制时会提前停止。',' · Send discusses for the selected rounds; /all asks each member once; /agent-id asks only that member once. Up to six replies; members can end the discussion early, and execution limits still apply.');
+  for(const option of $('#group-rounds').options){const n=Number(option.value),count=Math.min(6,members.length*n);option.textContent=say(`最多${n}轮 · ${count}次回复`,`Up to ${n} ${n===1?'round':'rounds'} · ${count} ${count===1?'reply':'replies'}`);}
   for(const option of $('#chat-agent').options){
     if(option.value==='all'){option.hidden=!group;continue;}
     option.disabled=Boolean(group&&allowed&&!allowed.includes(option.value)) || !profiles().some(p=>p.id===option.value&&p.enabled);
   }
+  if(typeof updateChatSendSummary==='function')updateChatSendSummary();
 }
 function selectedMembers(){return Array.from($('#chat-room-members').querySelectorAll('input:checked')).map(el=>el.value);}
 function renderAgentList(){

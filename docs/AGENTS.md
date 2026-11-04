@@ -8,6 +8,8 @@ Choose **Local simulator**, enter a stable ID such as `local-helper`, give it a 
 
 Create a read-only investigation task for it, or select it as a chat recipient. For a group rehearsal, select only simulator members before sending; unchecked agents are not invited. Address one member with `/local-helper Your question`. Rooms contain at most six members and discussions produce at most six replies.
 
+Ordinary sends to everyone use the visible 1–3 round selector: each invited member replies once per round, up to six replies and 25 minutes for the whole batch. Two simulators therefore produce up to four replies at two rounds and six at three rounds, without handoff directives. `/all` broadcasts once per member; selected-member and slash-directed messages invoke only one responder. A one-member room also replies only once. A complete round of explicit member DONE directives may stop early; missing directives do not. The conversation shows the actual completion/stop reason.
+
 ## Command-line adapter
 
 Install and authenticate the executor separately. Configure an executable as an absolute path or a command on PATH. Arguments are a JSON array, for example:

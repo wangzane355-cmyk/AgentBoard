@@ -21,7 +21,10 @@ const statusText = {ready:'待处理',queued:'已排队',running:'进行中',dec
 async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || '操作失败');
+  if (!res.ok) {
+    if(res.status===401)window.AgentBoardPhone?.sessionExpired?.();
+    throw new Error(data.error || '操作失败');
+  }
   return data;
 }
 function toast(message) {

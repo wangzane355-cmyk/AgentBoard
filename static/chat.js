@@ -21,6 +21,21 @@ function configureChatLayout(){ $('#chat-settings').open = !chatCompactLayout.ma
 chatCompactLayout.addEventListener('change', configureChatLayout);
 
 function agentName(agent){ return agent ? profileName(agent) : chatText('Python监督', 'Python supervisor'); }
+function chatBubblePalettes(messages){
+  const room = chatData?.mode === 'group' ? chatData.members || [] : [];
+  const agents = [...new Set([...room, ...messages.filter(message => message.role === 'assistant').map(message => message.agent)])]
+    .filter(agent => typeof agent === 'string' && agent).sort();
+  const colors = {codex:'codex', deepseek:'deepseek'};
+  const pool = ['teal','amber','rose','slate','codex','deepseek'];
+  const used = new Set(agents.filter(agent => agent === 'codex' || agent === 'deepseek'));
+  for(const agent of agents.filter(agent => agent !== 'codex' && agent !== 'deepseek')){
+    const hash = [...agent].reduce((value, char) => (Math.imul(value, 31) + char.codePointAt(0)) >>> 0, 0);
+    const choices = pool.map((_, index) => pool[(hash + index) % pool.length]);
+    colors[agent] = choices.find(color => !used.has(color)) || choices[0];
+    used.add(colors[agent]);
+  }
+  return colors;
+}
 function saveChatDraft(){ chatDrafts.set(chatDraftKey(), $('#chat-input').value); }
 function restoreChatDraft(){ $('#chat-input').value = chatDrafts.get(chatDraftKey()) || ''; }
 function chatProjectName(){ return state.projects.find(project => project.id === chatProject)?.name || chatText('自由讨论', 'Free discussion'); }
@@ -34,7 +49,7 @@ function setChatMode(mode, agent = null){
   $('#group-discussion-controls').classList.toggle('hidden', !group);
   $('#chat-agent').setAttribute('aria-label', group ? chatText('群聊回复对象', 'Room recipient') : chatText('对话执行者', 'Chat executor'));
   if(typeof renderRoomMembers === 'function') renderRoomMembers();
-  $('#chat-discuss').disabled = chatSending || chatData?.status === 'running' || $('#chat-agent').value !== 'all';
+  updateChatSendSummary();
 }
 function chatProjectOptions(selected, includeFree = true){
   return (includeFree ? `<option value="">${esc(chatText('自由讨论（暂不关联项目）', 'Free discussion (no project yet)'))}</option>` : '') +
@@ -109,6 +124,24 @@ async function showChat(taskId = '', mode = 'single', projectId = null){
   if(!$('#chat-dialog').open) $('#chat-dialog').showModal();
   await refreshChat();
 }
+async function openSavedChat(id){
+  if(chatSending || chatProjectBusy) return;
+  const saved = (state.chats || []).find(chat => chat.id === id);
+  if(!saved) return;
+  saveChatDraft();
+  chatProject = chatScopeId(saved.project_id);
+  currentChat = id;
+  chatData = null;
+  resetChatView();
+  chatSelectionChanged = true;
+  rebuildChatTasks(saved.task_id || '');
+  restoreChatDraft();
+  configureChatLayout();
+  if(!$('#chat-dialog').open) $('#chat-dialog').showModal();
+  updateChatControls();
+  await refreshChat();
+  document.dispatchEvent(new CustomEvent('agentboard:chat-selected'));
+}
 function updateChatFocus(){
   const task = state.tasks.find(item => item.id === $('#chat-task').value && item.project_id === chatProject);
   $('#chat-focus-title').textContent = task
@@ -118,14 +151,35 @@ function updateChatFocus(){
   const note = $('#chat-focus-title').nextElementSibling;
   if(note) note.textContent = chatProject ? chatText('自动带入已关联日志、任务目标、依赖和进度，无需重新介绍。', 'Linked references, tasks, dependencies and progress are included automatically.') : chatText('可以直接说想法，不需要先准备项目文件夹。', 'Start with an idea; a project folder can come later.');
 }
+function chatSendRouting(message = $('#chat-input').value,forDisplay = false){
+  const catalog = typeof profiles === 'function' ? profiles() : [{id:'codex',name:'Codex'},{id:'deepseek',name:'DeepSeek'}];
+  const members = currentChat && Array.isArray(chatData?.members) ? chatData.members : typeof selectedMembers === 'function' ? selectedMembers() : ['codex','deepseek'];
+  const resolve = forDisplay ? AgentBoardChatRouting.resolveComposer : AgentBoardChatRouting.resolveSend;
+  return resolve({mode:$('#chat-mode').value,agent:$('#chat-agent').value,message,running:chatData?.status === 'running',batch:chatData?.batch,
+    selectedRounds:$('#group-rounds').value,members,agentIds:catalog.filter(profile => profile.enabled !== false).map(profile => profile.id),
+    agentNames:Object.fromEntries(catalog.map(profile => [profile.id,profile.name]))});
+}
+function updateChatSendSummary(){
+  if(!$('#chat-send-summary')) return;
+  const routing = chatSendRouting($('#chat-input').value,true), running = chatData?.status === 'running';
+  const label = chatText(routing.labelZh,routing.labelEn);
+  if($('#chat-send-summary').textContent !== label) $('#chat-send-summary').textContent = label;
+  $('#chat-send-summary').classList.toggle('chat-send-invalid',Boolean(routing.invalid));
+  $('#group-discussion-controls').classList.toggle('hidden',$('#chat-mode').value !== 'group');
+  $('#group-rounds').disabled = running || chatSending || routing.directed || routing.kind === 'broadcast' || routing.explicitRounds;
+  $('#group-rounds').title = routing.directed ? chatText('指定的 Agent 只回复一次。','A directed message gets one reply.')
+    : routing.kind === 'broadcast' ? chatText('这条消息让全体成员各回复一次。','This message asks each member to reply once.')
+    : routing.explicitRounds ? chatText('这条消息已指定讨论轮数。','The message already specifies the round count.') : '';
+  $('#chat-send-limit-note').classList.toggle('hidden',routing.kind !== 'discussion');
+  $('#chat-send-limit-note').textContent = chatText('每轮每位回复一次；每批讨论最多25分钟，可提前结束。','One reply per member each round; 25 minutes for the whole discussion batch, which may end early.');
+}
 function updateChatControls(){
   const running = chatData?.status === 'running';
   const messages = chatData?.messages || [];
   $('#chat-task').disabled = !chatProject || running || chatSending;
   $('#chat-agent').disabled = running || chatSending;
   $('#chat-mode').disabled = Boolean(currentChat) || running || chatSending;
-  $('#chat-discuss').disabled = running || chatSending || $('#chat-agent').value !== 'all';
-  $('#group-rounds').disabled = running || chatSending;
+  updateChatSendSummary();
   $('#chat-source').disabled = !chatProject || Boolean(currentChat) || chatSending;
   if(!chatProject) $('#chat-source').checked = false;
   else if(chatData) $('#chat-source').checked = Boolean(chatData.include_source);
@@ -142,10 +196,11 @@ function updateChatControls(){
   $('#chat-start-plan').disabled = running || chatSending;
   $('#chat-consensus').disabled = running || chatSending || !currentChat;
   $('#chat-context-note').textContent = chatProject
-    ? chatText('默认携带项目名称和任务概况。历史自动保存；每轮携带最近最多约4.2万字，最多25分钟。', 'Project and task context is included. History is saved automatically; each turn includes up to about 42,000 recent characters and lasts at most 25 minutes.')
-    : chatText('自由讨论只带入当前聊天记录，不读取项目源码。历史自动保存；每轮最多25分钟。', 'Free discussion uses this conversation without project source files. History is saved automatically; each turn lasts at most 25 minutes.');
+    ? chatText('默认携带项目名称和任务概况。历史自动保存；每次回复携带最近最多约4.2万字，每批讨论最多25分钟。', 'Project and task context is included. History is saved automatically; each reply includes up to about 42,000 recent characters. Each discussion batch lasts at most 25 minutes.')
+    : chatText('自由讨论只带入当前聊天记录，不读取项目源码。历史自动保存；每批讨论最多25分钟。', 'Free discussion uses this conversation without project source files. History is saved automatically; each discussion batch lasts at most 25 minutes.');
   updateChatFocus();
   renderChatScope();
+  document.dispatchEvent(new CustomEvent('agentboard:chat-layout'));
 }
 async function refreshChat(){
   if(!$('#chat-dialog').open) return;
@@ -163,17 +218,7 @@ async function refreshChat(){
     const sessionSignature = JSON.stringify([chatProject, currentChat, sessions, AgentBoardI18n.language]);
     if(sessionSignature !== lastSessionSignature){
       $('#chat-sessions').innerHTML = sessions.map(chat => `<button class="chat-session ${chat.id === currentChat ? 'active' : ''}" data-chat="${esc(chat.id)}"><strong>${esc(chat.title)}</strong><small>${chat.mode === 'group' ? esc((chat.members || []).map(agentName).join(' / ')) : esc(agentName(chat.agent))} · ${chat.status === 'running' ? chatText('回复中', 'Replying') : chat.status === 'error' ? chatText('需查看', 'Needs attention') : chatText('已保存', 'Saved')}</small></button>`).join('') || `<p class="hint">${chatProject ? chatText('这个项目还没有对话', 'No conversations in this project yet') : chatText('还没有自由讨论，直接说说你的想法吧。', 'No free discussions yet. Share an idea to begin.')}</p>`;
-      $('#chat-sessions').querySelectorAll('[data-chat]').forEach(button => button.onclick = async () => {
-        if(chatSending || chatProjectBusy) return;
-        saveChatDraft();
-        currentChat = button.dataset.chat;
-        chatData = null;
-        resetChatView();
-        chatSelectionChanged = true;
-        restoreChatDraft();
-        updateChatControls();
-        await refreshChat();
-      });
+      $('#chat-sessions').querySelectorAll('[data-chat]').forEach(button => button.onclick = () => openSavedChat(button.dataset.chat));
       lastSessionSignature = sessionSignature;
     }
     if(currentChat){
@@ -192,7 +237,8 @@ async function refreshChat(){
     const signature = JSON.stringify([messages, AgentBoardI18n.language]);
     if(signature !== lastMessageSignature || !$('#chat-messages').innerHTML){
       const box = $('#chat-messages'), nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 90;
-      box.innerHTML = messages.map(message => `<article class="chat-message ${message.role === 'user' ? 'user' : message.role === 'system' ? 'system' : 'assistant'} ${message.agent === 'codex' ? 'from-codex' : message.agent === 'deepseek' ? 'from-deepseek' : ''}"><div class="chat-message-label">${esc(message.role === 'user' ? chatText('你', 'You') : message.role === 'system' ? chatText('Python监督', 'Python supervisor') : agentName(message.agent))}${message.audience && chatData?.mode === 'group' ? ` <span class="chat-audience">→ ${message.directed ? esc(message.audience.map(agentName).join('、')) : chatText('全体', 'Everyone')}</span>` : ''}${message.simulation ? ' [SIMULATION]' : ''}${message.handoff_to ? ` <span class="chat-audience">${chatText('请 ', 'Invite ')}${esc(agentName(message.handoff_to))}${chatText(' 接话', ' to reply')}</span>` : ''}</div>${message.agent === 'codex' ? modelRecordLabel(message.model_record) : ''}<div data-chat-user-value>${esc(message.text)}</div></article>`).join('') || `<div class="chat-empty">${chatProject ? chatText('先说说你的想法', 'Share your idea') : chatText('想做什么，先聊聊', 'Start with an idea')}<small>${chatProject ? chatText('项目资料会随消息带入', 'Project references are included with your messages') : chatText('不用先建项目，确定方向后再开始', 'A project can come after you choose a direction')}</small></div>`;
+      const palettes = chatBubblePalettes(messages);
+      box.innerHTML = messages.map(message => `<article ${message.role === 'assistant' && message.agent ? `data-chat-palette="${esc(palettes[message.agent] || '')}"` : ''} class="chat-message ${message.role === 'user' ? 'user' : message.role === 'system' ? 'system' : 'assistant'} ${message.agent === 'codex' ? 'from-codex' : message.agent === 'deepseek' ? 'from-deepseek' : ''}"><div class="chat-message-label">${esc(message.role === 'user' ? chatText('你', 'You') : message.role === 'system' ? chatText('Python监督', 'Python supervisor') : agentName(message.agent))}${message.audience && chatData?.mode === 'group' ? ` <span class="chat-audience">→ ${message.directed ? esc(message.audience.map(agentName).join('、')) : chatText('全体', 'Everyone')}</span>` : ''}${message.simulation ? ' [SIMULATION]' : ''}${message.handoff_to ? ` <span class="chat-audience">${chatText('请 ', 'Invite ')}${esc(agentName(message.handoff_to))}${chatText(' 接话', ' to reply')}</span>` : ''}</div>${message.agent === 'codex' ? modelRecordLabel(message.model_record) : ''}<div data-chat-user-value>${esc(message.text)}</div></article>`).join('') || `<div class="chat-empty">${chatProject ? chatText('先说说你的想法', 'Share your idea') : chatText('想做什么，先聊聊', 'Start with an idea')}<small>${chatProject ? chatText('项目资料会随消息带入', 'Project references are included with your messages') : chatText('不用先建项目，确定方向后再开始', 'A project can come after you choose a direction')}</small></div>`;
       if(nearBottom || lastMessageSignature === '') box.scrollTop = box.scrollHeight;
       lastMessageSignature = signature;
     }
@@ -206,7 +252,9 @@ async function refreshChat(){
       ? chatText(`最近自动读取 ${chatData.context_sources?.length || 0} 项资料 · `, `Last refreshed ${chatData.context_sources?.length || 0} references · `) + new Date(chatData.context_read_at).toLocaleString() + (chatData.consensus ? (chatData.consensus_needs_review ? chatText(' · 项目或任务已变，共识需核对', ' · Context changed; review consensus') : chatText(' · 已保存共识', ' · Consensus saved')) : '')
       : chatText(`已关联 ${referenceCount} 处资料，发送时自动读取；无需勾选源码。`, `${referenceCount} references linked; refreshed when sending. Source snapshot is optional.`);
     const running = chatData?.status === 'running', batch = chatData?.mode === 'group' ? chatData.batch : null;
-    $('#chat-status').textContent = chatData?.error || (batch?.status === 'done' ? chatText(`本批次结束，${batch.completed} 次回复。`, `Batch finished: ${batch.completed} replies.`) : '');
+    const finished = batch && ['done','stopped','error'].includes(batch.status);
+    const batchSummary = finished ? AgentBoardChatRouting.describeBatch(batch) : null;
+    $('#chat-status').textContent = batchSummary ? chatText(batchSummary.labelZh,batchSummary.labelEn)+(chatData?.error ? ' '+chatData.error : '') : chatData?.error || '';
     if(running){
       const phase = chatData.phase === 'waiting_reply' ? chatText('等待执行器回复', 'Waiting for executor reply') : chatText('正在准备执行器', 'Preparing executor');
       const started = batch?.started_at || chatData.reply_started_at || chatData.updated_at;
@@ -221,7 +269,8 @@ async function refreshChat(){
 $('#open-chat').onclick = () => showChat();
 $('#plan-next').onclick = () => showChat('', 'single', activeProject);
 $('#chat-dialog').addEventListener('close', saveChatDraft);
-$('#chat-input').addEventListener('input', saveChatDraft);
+$('#chat-input').addEventListener('input', () => { saveChatDraft(); updateChatSendSummary(); });
+$('#group-rounds').onchange = updateChatSendSummary;
 $('#chat-scope').onchange = async event => {
   if(chatSending || chatProjectBusy) return;
   beginNewChat(event.target.value);
@@ -234,6 +283,7 @@ $('#new-chat').onclick = async () => {
   const draft = $('#chat-input').value;
   beginNewChat(chatProject, {draft, mode: $('#chat-mode').value});
   await refreshChat();
+  document.dispatchEvent(new CustomEvent('agentboard:chat-selected'));
 };
 $('#chat-task').onchange = async () => {
   updateChatFocus();
@@ -262,7 +312,7 @@ $('#chat-form').onsubmit = async event => {
   const input = $('#chat-input'), text = input.value.trim();
   if(!text || chatSending || chatData?.status === 'running') return;
   if(chatSelectionChanged) return toast(chatText('正在读取这段对话，请稍后发送。', 'Loading the conversation; please send again shortly.'));
-  const version = chatViewVersion, projectId = chatProject;
+  const version = chatViewVersion, projectId = chatProject, routing = chatSendRouting(text);
   chatSending = true; updateChatControls();
   try{
     if(!currentChat){
@@ -274,20 +324,18 @@ $('#chat-form').onsubmit = async event => {
       saveChatDraft();
     }
     const id = currentChat;
-    await api(`/api/chats/${id}/send`, {message: text, agent: $('#chat-agent').value});
-    if(version === chatViewVersion && id === currentChat){ input.value = ''; saveChatDraft(); }
+    const sent = await api(`/api/chats/${id}/send`, routing.body);
+    if(version === chatViewVersion && id === currentChat){
+      const accepted = sent.data ?? sent;
+      if(accepted?.id === id) chatData = accepted;
+      input.value = ''; saveChatDraft(); updateChatControls();
+    }
     await refresh();
   }catch(error){ toast(error.message); }
   finally{ chatSending = false; updateChatControls(); await refreshChat(); }
 };
 $('#chat-input').onkeydown = event => { if((event.ctrlKey || event.metaKey) && event.key === 'Enter'){ event.preventDefault(); $('#chat-form').requestSubmit(); } };
 $('#chat-stop').onclick = async () => { const id = currentChat; if(!id) return; try{ await api(`/api/chats/${id}/stop`, {}); await refresh(); await refreshChat(); }catch(error){ toast(error.message); } };
-$('#chat-discuss').onclick = () => {
-  const input = $('#chat-input');
-  if(new RegExp('^/(' + profiles().map(profile => profile.id).concat('ds').join('|') + ')(\\s|$)', 'i').test(input.value.trim())) return toast(chatText('这是一条定向消息，请直接发送；需要群聊讨论时再使用 /讨论。', 'This message is directed. Send it directly; use /discuss for a group discussion.'));
-  input.value = `${chatText('/讨论', '/discuss')} ${$('#group-rounds').value} ${input.value.trim() || chatText('请围绕当前想法互相审查，明确分歧与下一步建议，不要执行开发。', 'Review the current idea together, identify disagreements and suggest next steps. Do not implement changes.')}`;
-  saveChatDraft(); $('#chat-form').requestSubmit();
-};
 $('#chat-organize').onclick = () => {
   const input = $('#chat-input');
   input.value = (input.value.trim() ? input.value.trim() + '\n\n' : '') + (chatProject
@@ -366,15 +414,32 @@ function updateProjectDialogText(){
   $('#chat-project-create-title').textContent = attaching ? chatText('从这段讨论新建项目', 'Create a project from this discussion') : chatText('新建项目', 'Create a project');
   $('#chat-project-create-note').textContent = attaching
     ? chatText('创建成功后，会把这段讨论关联到新项目。聊天历史和未发送的文字会保留。', 'After creation, this conversation will be linked to the new project. History and unsent text are preserved.')
-    : chatText('创建成功后，会切到新项目的新对话；当前聊天记录和未发送的文字会保留。', 'After creation, a new conversation opens for this project. The current history and unsent text are preserved.');
+    : !$('#chat-dialog').open && window.matchMedia('(max-width:760px)').matches
+      ? chatText('创建成功后进入项目页面，可以继续讨论、安排任务或添加资料。', 'After creation, open the project page to discuss, assign tasks or add references.')
+      : chatText('创建成功后，会切到新项目的新对话；当前聊天记录和未发送的文字会保留。', 'After creation, a new conversation opens for this project. The current history and unsent text are preserved.');
   $('#chat-project-create-submit').textContent = chatCreatedProject ? chatText('重试关联已创建的项目', 'Retry linking the created project') : attaching ? chatText('创建并关联讨论', 'Create & link conversation') : chatText('创建项目', 'Create project');
 }
+function updateChatProjectFolderMode(){
+  const form=$('#chat-project-create-form'), automatic=form.elements.folder_mode.value==='auto';
+  $('#chat-project-auto-folder').classList.toggle('hidden', !automatic);
+  $('#chat-project-custom-folder').classList.toggle('hidden', automatic);
+  form.elements.path.required=!automatic;
+  form.elements.path.disabled=automatic || Boolean(chatCreatedProject);
+  form.elements.create_directory.disabled=automatic || Boolean(chatCreatedProject);
+  form.elements.folder_mode.disabled=Boolean(chatCreatedProject);
+  $('#chat-project-folder-note').textContent=automatic
+    ? chatText('创建项目不会启动模型或开发任务。可以继续讨论，准备好后再派任务。','Creating a project does not start a model or task. Continue discussing, then start work when ready.')
+    : chatText('使用已有文件夹时不用勾选。创建项目不会启动模型或开发任务。','Leave unchecked for an existing folder. Creating a project does not start a model or task.');
+}
+$('#chat-project-folder-mode').onchange=updateChatProjectFolderMode;
 function openChatProjectDialog(fromCurrent){
   if(chatSending || chatProjectBusy || fromCurrent && (!currentChat || chatData?.status === 'running')) return;
   chatCreateTarget = fromCurrent ? currentChat : null;
   chatCreatedProject = null;
   const form = $('#chat-project-create-form'); form.reset();
   form.querySelectorAll('input').forEach(input => input.disabled = false);
+  form.elements.folder_mode.value=(window.AgentBoardPhone?.remote || document.documentElement.dataset.phoneClient==='remote')?'auto':'custom';
+  updateChatProjectFolderMode();
   $('#chat-project-create-error').classList.add('hidden');
   updateProjectDialogText(); $('#chat-project-create-dialog').showModal();
 }
@@ -383,18 +448,22 @@ $('#chat-project-from-discussion').onclick = () => openChatProjectDialog(true);
 $('#chat-project-create-form').onsubmit = async event => {
   event.preventDefault();
   if(chatProjectBusy) return;
-  const form = event.target, draft = $('#chat-input').value;
+  const form = event.target, draft = $('#chat-input').value, fromChat = $('#chat-dialog').open;
   if(!chatCreatedProject && !form.reportValidity()) return;
   chatProjectBusy = true; $('#chat-project-create-submit').disabled = true; updateChatControls();
   try{
     if(!chatCreatedProject){
-      const response = await api('/api/projects', {name: form.elements.name.value.trim(), path: form.elements.path.value.trim(), create_directory: form.elements.create_directory.checked, check: 'none', protected_paths: [], context_files: [], context_urls: []});
+      const folder=form.elements.folder_mode.value==='auto' ? {managed_directory:true} : {path:form.elements.path.value.trim(),create_directory:form.elements.create_directory.checked};
+      const response = await api('/api/projects', {name: form.elements.name.value.trim(), ...folder, check: 'none', protected_paths: [], context_files: [], context_urls: []});
       chatCreatedProject = response.data;
+      activeProject = chatCreatedProject.id;
       form.querySelectorAll('input').forEach(input => input.disabled = true);
+      updateChatProjectFolderMode();
       await refresh();
     }
     if(chatCreateTarget) await linkCurrentConversation(chatCreateTarget, chatCreatedProject.id);
     else{ beginNewChat(chatCreatedProject.id, {draft}); await refreshChat(); }
+    document.dispatchEvent(new CustomEvent('agentboard:project-created',{detail:{id:chatCreatedProject.id,fromChat}}));
     $('#chat-project-create-dialog').close();
     toast(chatText('项目已创建，可以继续讨论。', 'Project created. Continue the conversation when ready.'));
   }catch(error){
@@ -412,6 +481,7 @@ function localizeChat(){
   renderChatScope();
   rebuildChatTasks(chatData?.task_id || $('#chat-task').value);
   updateProjectDialogText();
+  updateChatProjectFolderMode();
   updateChatControls();
   lastMessageSignature = ''; lastSessionSignature = '';
   if($('#chat-dialog').open) refreshChat();

@@ -127,9 +127,15 @@ class StartupLock:
 
 def start_background(port, data):
     data.mkdir(parents=True, exist_ok=True)
+    # A pythonw desktop entry still launches the same background executable as
+    # the console entry. CREATE_NO_WINDOW keeps it hidden and one firewall rule
+    # remains valid across shortcut, command-line and service restarts.
+    runtime = Path(sys.executable)
+    if runtime.name.lower() == "pythonw.exe" and runtime.with_name("python.exe").is_file():
+        runtime = runtime.with_name("python.exe")
     with (data / "launcher.log").open("ab") as log:
         return subprocess.Popen(
-            [sys.executable, "-B", "-X", "utf8", str(BASE / "server.py"), "--no-browser", "--port", str(port)],
+            [str(runtime), "-B", "-X", "utf8", str(BASE / "server.py"), "--no-browser", "--port", str(port)],
             cwd=BASE, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
             env={**os.environ, "AGENTBOARD_DATA_DIR": str(data)},
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
