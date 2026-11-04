@@ -1,5 +1,40 @@
 # Changelog
 
+
+## 0.4.0 — 2026-11-03 (source update)
+
+- Validate chat scopes and recoverable cleanup with 176 offline tests on Windows, plus desktop/390px UI checks using a local simulator. An idle-only service restart preserved existing project and task records.
+
+- Add project-free discussion with Codex selected, a permanent chat scope selector and draft preservation across scope/conversation switches. Scope navigation does not silently move an existing conversation.
+- Add explicit idle-conversation project linking and project creation inside chat, including opt-in folder creation. Preserve history, clear the earlier task link and invalidate stale consensus/context when moving discussions. Background replies continue when viewing another scope.
+- Add recoverable task/project deletion, recycle-bin restoration and a short undo action. Project deletion hides its associated visible work without deleting source folders, historical results or integrated changes. Active work/dependencies block deletion; restoration does not start tasks.
+
+- Harden desktop startup with a cross-process startup lock, detached background process, actual health/page readiness, bounded slow-start waiting, visible progress/errors and fixed interpreter/working-directory selection.
+
+- Add a plain-language Chinese beginner guide with an isolated first-task exercise, copyable verification fields, delivery acceptance and troubleshooting.
+
+- Add a durable SQLite-backed Codex delivery supervisor: plan, build, immutable verification, independent review and bounded repair.
+- Add per-phase checkpoints, exact process identity, pause/resume/stop, restart recovery, leader ownership, time/round/stall and no-progress limits. Default to one autonomous worker; opt in to two.
+- Add Python/Node test recipes, controlled test commands, installed-browser desktop/mobile captures, zero-test rejection and fixed acceptance file hashes.
+- Add goal-first bilingual delivery workspace, reports, evidence gallery, mobile navigation and a resizable right-side conversation workspace. Preserve the original board, executor settings and explicit integration/rollback.
+- Add read-only connection diagnostics, idle-only backend restart and public-source packaging with SHA256 manifests.
+- Validate offline lifecycle/integrity/process checks and separate live Codex trials. Tests do not assert that model claims establish product correctness. See docs/AUTONOMY.md for operational boundaries.
+
+## Unreleased — 2026-11-03
+
+- Support real Codex quota windows for weekly-only accounts, preserving the 15% cutoff, freshness checks, account restrictions and read-failure protection. Weekly capacity is no longer mistaken for an unavailable five-hour reading.
+- Display the limiting quota window in both interface languages. Retain the five-hour field only when the account actually supplies it.
+- Add offline parser and task/chat guard coverage, plus a dated research and autonomy roadmap. The research roadmap records the pre-0.4 baseline; the 0.4 entry and autonomy guide describe the implemented loop.
+
+## 0.3.1 — 2026-10-29
+
+- Consolidated the sidebar chat buttons into one Agent chat entry. Single/group mode, room membership, recipients and discussion controls remain available inside the shared chat interface.
+
+- Added local Codex model and reasoning preferences, with capability-filtered choices from the installed client's model cache. Defaults remain inherited until explicitly changed; global Codex configuration is untouched.
+- Added per-task overrides and invocation snapshots. Quota fallback drops Codex-only parameters, and preference edits are blocked during active Codex tasks or room batches.
+- Task capsules, run details and chat replies distinguish requested settings from model/effort confirmed by the CLI startup log. Old records remain compatible.
+- Added offline selection, persistence, capability, command, evidence and concurrency checks. No live model was invoked during validation. See docs/MODEL_SETTINGS.md.
+
 ## 0.3.0 — 2026-10-29
 
 - Added managed DeepSeek runtime slots with a fixed local Node runtime, startup checks, explicit preparation/activation and manual rollback. Existing desktop applications and credentials remain separate.

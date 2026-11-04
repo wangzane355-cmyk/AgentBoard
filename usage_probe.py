@@ -1,10 +1,11 @@
-"""Read the signed-in Codex account's 5-hour quota through app-server JSON-RPC.
+"""Read actual signed-in Codex quota windows through app-server JSON-RPC.
 
 This makes no model turn. It never reads or prints auth secrets.
 """
 from __future__ import annotations
 
 import json
+import math
 import os
 import queue
 import shutil
@@ -14,7 +15,70 @@ import time
 from datetime import datetime, timezone
 
 
-def read_five_hour_limit(timeout_seconds: float = 15.0) -> dict:
+def _number(value) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def summarize_rate_limits(result: dict) -> dict:
+    """A weekly reading is never a five-hour estimate."""
+    buckets = result.get("rateLimitsByLimitId") or {}
+    bucket = buckets.get("codex") or result.get("rateLimits") or {}
+    windows = []
+    for name in ("primary", "secondary"):
+        window = bucket.get(name)
+        if window is None:
+            continue
+        if not isinstance(window, dict):
+            raise ValueError("Codex额度窗口格式无效")
+        minutes, used = window.get("windowDurationMins"), window.get("usedPercent")
+        if not _number(minutes) or minutes <= 0 or not _number(used) or not 0 <= used <= 100:
+            raise ValueError("Codex额度窗口缺失或读数无效")
+        windows.append({"name": name, "window_minutes": minutes, "remaining_percent": 100 - used,
+                        "resets_at": window.get("resetsAt")})
+    if not windows:
+        raise RuntimeError("当前账号没有可验证的Codex额度窗口")
+    limiting = min(windows, key=lambda window: window["remaining_percent"])
+    five_hour = next((window for window in windows if window["window_minutes"] == 300), None)
+    return {"codex_5h_remaining": five_hour["remaining_percent"] if five_hour else None,
+            "codex_remaining": limiting["remaining_percent"], "quota_windows": windows,
+            "limiting_window_minutes": limiting["window_minutes"],
+            "observed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "resets_at": limiting["resets_at"],
+            "ordinary_usage_allowed": result.get("ordinaryUsageAllowed"), "source": "app-server"}
+
+
+def codex_budget_block_reason(budget: dict, current_time: float | None = None) -> str | None:
+    """Apply one fresh, real-window guard to tasks and conversations."""
+    if budget.get("probe_error"):
+        return "Codex用量读取失败"
+    if budget.get("ordinary_usage_allowed") is False:
+        return "Codex账号当前不允许使用"
+    current_time = time.time() if current_time is None else current_time
+    try:
+        age = current_time - datetime.fromisoformat(budget["observed_at"]).timestamp()
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return "Codex用量读数缺失或无效"
+    if not 0 <= age <= 1800:
+        return "Codex用量读数已过期或时间无效"
+    windows = budget.get("quota_windows")
+    if windows is not None:
+        if not isinstance(windows, list) or not windows:
+            return "Codex没有可验证的额度窗口"
+        readings = []
+        for window in windows:
+            if not isinstance(window, dict) or not _number(window.get("window_minutes")) or window["window_minutes"] <= 0:
+                return "Codex额度窗口格式无效"
+            readings.append(window.get("remaining_percent"))
+    else:
+        readings = [budget.get("codex_5h_remaining")]  # Old local records.
+    if any(not _number(value) or not 0 <= value <= 100 for value in readings):
+        return "Codex没有有效额度读数"
+    if min(readings) <= 15:
+        return "Codex可读额度窗口剩余不高于15%"
+    return None
+
+
+def read_account_limits(timeout_seconds: float = 15.0) -> dict:
     exe = shutil.which("codex.cmd") or shutil.which("codex")
     if not exe:
         raise RuntimeError("找不到 Codex CLI")
@@ -63,19 +127,7 @@ def read_five_hour_limit(timeout_seconds: float = 15.0) -> dict:
         send({"method": "initialized", "params": {}})
         send({"id": 2, "method": "account/rateLimits/read"})
         result = reply(2)
-        bucket = (result.get("rateLimitsByLimitId") or {}).get("codex") or result.get("rateLimits") or {}
-        windows = [bucket.get("primary"), bucket.get("secondary")]
-        five_hour = next((w for w in windows if isinstance(w, dict) and w.get("windowDurationMins") == 300), None)
-        if five_hour is None or five_hour.get("usedPercent") is None:
-            raise RuntimeError("当前账号没有可读取的 5 小时窗口")
-        used = max(0, min(100, int(five_hour["usedPercent"])))
-        return {
-            "codex_5h_remaining": 100 - used,
-            "observed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            "resets_at": five_hour.get("resetsAt"),
-            "ordinary_usage_allowed": result.get("ordinaryUsageAllowed"),
-            "source": "app-server",
-        }
+        return summarize_rate_limits(result)
     finally:
         try:
             proc.stdin.close()
@@ -91,9 +143,12 @@ def read_five_hour_limit(timeout_seconds: float = 15.0) -> dict:
                 proc.kill()
 
 
+read_five_hour_limit = read_account_limits  # Compatibility for local callers.
+
+
 if __name__ == "__main__":
     try:
-        print(json.dumps(read_five_hour_limit(), ensure_ascii=False))
+        print(json.dumps(read_account_limits(), ensure_ascii=False))
     except Exception as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))
         raise SystemExit(1)

@@ -1,9 +1,13 @@
 let state = {projects:[],tasks:[],runs:[],agents:{}};
 let activeProject = null;
+try { activeProject=localStorage.getItem('agentboard.project')||null; } catch (_) {}
 let activeTask = null;
 let editingTask = null;
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uxText = (zh,en) => AgentBoardI18n.choose(zh,en);
+const trashIcon = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
+const archiveBusy = new Set();
 const cols = [
   ['ready','待处理', t => ['ready','queued'].includes(t.status)],
   ['running','进行中', t => t.status === 'running'],
@@ -34,12 +38,16 @@ function render() {
   if (!activeProject && state.projects.length) activeProject = state.projects[0].id;
   if (activeProject && !state.projects.some(p=>p.id===activeProject)) activeProject = state.projects[0]?.id || null;
   const project = state.projects.find(p=>p.id===activeProject);
-  $('#project-nav').innerHTML = state.projects.map(p=>`<button class="project-link ${p.id===activeProject?'active':''}" data-project="${esc(p.id)}">${esc(p.name)}</button>`).join('') || '<div class="tiny">暂无项目</div>';
+  $('#project-nav').innerHTML = state.projects.map(p=>`<div class="project-nav-row"><button class="project-link ${p.id===activeProject?'active':''}" data-project="${esc(p.id)}" title="${esc(p.name)}">${esc(p.name)}</button><button class="archive-icon project-delete" data-delete-project="${esc(p.id)}" title="${uxText('删除项目','Delete project')}" aria-label="${esc(uxText('删除项目：','Delete project: ')+p.name)}">${trashIcon}</button></div>`).join('') || '<div class="tiny">暂无项目</div>';
   $('#project-title').textContent = project?.name || AgentBoardI18n.translate('任务看板');
   $('#project-subtitle').textContent = project ? '用任务卡调度 Codex 和 DeepSeek；Python 负责监督。' : '先添加一个本地项目。';
   $('#agent-status').innerHTML = `<span class="mini-badge ${state.agents.codex?'ok':''}">Codex ${state.agents.codex?'可用':'未找到'}</span><span class="mini-badge ${state.agents.deepseek?'ok':''}">DeepSeek ${state.agents.deepseek?'可用':'未找到'}</span>`;
   const budget=state.budget||{}, age=budget.observed_at?Date.now()-Date.parse(budget.observed_at):Infinity;
-  $('#budget-button').textContent=budget.probe_error?'Codex 5h：读取失败 · 点击重试':budget.codex_5h_remaining==null?'Codex 5h：读取中':`Codex 5h：剩余 ${budget.codex_5h_remaining}%${age>30*60*1000?' · 已过期':''}`;
+  const remaining=budget.codex_remaining ?? budget.codex_5h_remaining;
+  const minutes=budget.limiting_window_minutes ?? (budget.codex_5h_remaining==null?null:300);
+  const windowLabel=minutes===300?'5h':minutes===10080?'7d':minutes==null?'':`${minutes}m`;
+  const quotaLabel=`Codex${windowLabel?' '+windowLabel:''}`;
+  $('#budget-button').textContent=budget.probe_error?`${quotaLabel}：读取失败 · 点击重试`:remaining==null?`${quotaLabel}：读取中`:`${quotaLabel}：剩余 ${remaining}%${age>30*60*1000?' · 已过期':''}`;
   $('#budget-button').title=budget.probe_error||'通过本机 Codex app-server 自动读取；点击立即刷新';
   if(state.demo){$('#project-subtitle').textContent='演示工作区 · 示例数据 · 不调用真实Agent';$('#budget-button').textContent='只读演示';$('#agent-status').innerHTML='<span class="mini-badge">DEMO · SAMPLE DATA</span>';}
   const tasks = state.tasks.filter(t=>t.project_id===activeProject);
@@ -52,14 +60,18 @@ function render() {
   }).join('');
   document.querySelectorAll('[data-project]').forEach(b=>b.onclick=()=>{activeProject=b.dataset.project;activeTask=null;closeDrawer();render();});
   document.querySelectorAll('[data-task]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.task));
+  document.querySelectorAll('[data-delete-task]').forEach(b=>b.onclick=()=>archiveItem('task',b.dataset.deleteTask));
+  document.querySelectorAll('[data-delete-project]').forEach(b=>b.onclick=()=>archiveItem('project',b.dataset.deleteProject));
+  renderTrash();
   if (activeTask) drawDrawer();
   if(typeof renderAgents==='function')renderAgents();
+  document.dispatchEvent(new CustomEvent('agentboard:render'));
 }
 function card(t) {
   const run = latestRun(t);
   const bottom = t.status==='running' ? `${elapsed(run?.started_at)} / ${t.limit_minutes}:00` : t.mode==='explore'?'先调查':'开发任务';
   const agent=run?.agent||t.agent;
-  return `<button class="card" data-task="${esc(t.id)}"><div class="card-top"><span>${esc(t.id.toUpperCase())}</span><span class="agent-chip ${agent}">${esc(profileName(agent))}${(run?.simulation||(!run&&profiles().find(p=>p.id===agent)?.simulation))?' [SIMULATION]':''}</span></div><div class="card-title">${esc(t.title)}</div><div class="card-description">${esc(t.description)}</div>${run?.error?`<div class="card-error">${esc(run.error)}</div>`:''}<div class="card-bottom"><span>${esc(statusText[t.status])}</span><span>${esc(bottom)}</span></div></button>`;
+  return `<div class="task-card-wrap"><button class="card" data-task="${esc(t.id)}"><div class="card-top"><span>${esc(t.id.toUpperCase())}</span><span class="agent-chip ${agent}">${esc(profileName(agent))}${(run?.simulation||(!run&&profiles().find(p=>p.id===agent)?.simulation))?' [SIMULATION]':''}</span></div><div class="card-title">${esc(t.title)}</div><div class="card-description">${esc(t.description)}</div>${run?.error?`<div class="card-error">${esc(run.error)}</div>`:''}<div class="card-bottom"><span>${esc(statusText[t.status])}</span><span>${esc(bottom)}</span></div></button><button class="archive-icon task-delete" data-delete-task="${esc(t.id)}" title="${uxText(['running','queued'].includes(t.status)?'请先停止任务再删除':'删除任务',['running','queued'].includes(t.status)?'Stop the task before deleting':'Delete task')}" aria-label="${esc(uxText('删除任务：','Delete task: ')+t.title)}" ${['running','queued'].includes(t.status)?'disabled':''}>${trashIcon}</button></div>`;
 }
 function openDrawer(id) {activeTask=id;$('#shade').classList.remove('hidden');$('#drawer').classList.remove('hidden');drawDrawer();}
 function closeDrawer() {activeTask=null;$('#shade').classList.add('hidden');$('#drawer').classList.add('hidden');}
@@ -80,17 +92,20 @@ function drawDrawer() {
   const children=state.tasks.filter(x=>x.depends_on.includes(t.id));
   let actions='';
   actions += '<button class="ghost" data-action="discuss">讨论这张任务</button>';
-  if (['ready','blocked','done'].includes(t.status)) actions += `<button class="primary" data-action="start">${t.status==='blocked'?'重新运行':'启动任务'}</button>`;
-  if (!['running','queued'].includes(t.status)) actions += '<button class="ghost" data-action="edit">编辑任务</button>';
+  if (t.mission_id) actions += '<button class="soft" data-action="mission">自主任务进度</button>';
+  if (!t.mission_id && ['ready','blocked','done'].includes(t.status)) actions += `<button class="primary" data-action="start">${t.status==='blocked'?'重新运行':'启动任务'}</button>`;
+  if (!t.mission_id && !['running','queued'].includes(t.status)) actions += '<button class="ghost" data-action="edit">编辑任务</button>';
   if (t.status==='queued') actions += '<button class="ghost" data-action="stop">取消排队</button>';
   if (t.status==='running') actions += '<button class="danger" data-action="stop">停止运行</button>';
   if (t.status==='review') actions += `<button class="soft" data-action="accept">${t.mode==='explore'?'标记已了解':'接入原项目'}</button>`;
   if (t.status==='done' && t.mode==='implement' && run?.promotion && Object.keys(run.promotion).length) actions += '<button class="danger" data-action="rollback">撤回本次接入</button>';
+  if (!['running','queued'].includes(t.status)) actions += '<button class="danger" data-action="delete">'+uxText('删除任务','Delete task')+'</button>';
   const checkRows = run ? (run.evidence||[]).map(item=>`<div class="check ${item.status==='pass'?'ok':item.status==='fail'?'bad':''}">${item.status==='pass'?'✓':item.status==='fail'?'✕':'○'} <strong>${esc(item.label)}</strong> · ${esc(item.detail)}</div>`).join('') || `<div class="check">${esc(run.error || 'Python 正在检查')}</div>` : '<div class="check">尚未运行</div>';
   $('#drawer-body').innerHTML = `<h2>${esc(t.title)}</h2><div class="detail-desc">${esc(t.description)}</div>
     <div class="detail-section"><div class="detail-row"><span>状态</span><strong>${esc(statusText[t.status])}</strong></div><div class="detail-row"><span>指定执行者</span><strong>${esc(profileName(t.agent))}</strong></div>${run?`<div class="detail-row"><span>实际执行者</span><strong>${esc(profileName(run.agent))}</strong></div>`:''}<div class="detail-row"><span>方式</span><strong>${t.mode==='explore'?'只读调查':'开发修改'}</strong></div><div class="detail-row"><span>时限</span><strong>${t.limit_minutes} 分钟</strong></div><div class="detail-row"><span>任务 ID</span><strong>${esc(t.id)}</strong></div>${run?.started_at?`<div class="detail-row"><span>开始</span><strong>${esc(new Date(run.started_at).toLocaleString())}</strong></div>`:''}</div>
     ${run?.budget_note?`<div class="warning">${esc(run.budget_note)}</div>`:''}
     <div class="detail-section"><h3>允许改动</h3><div class="tag-list">${t.allowed_paths.map(x=>`<span class="tag">${esc(x)}</span>`).join('')||'<span class="tag">无 · 只读</span>'}</div></div>
+    ${run?.agent==='codex'?modelRecordLabel(run.model_record||{requested:run.execution_config||{}}):''}
     <div class="detail-section"><h3>关联资料</h3><div class="tag-list">${[...(state.projects.find(p=>p.id===t.project_id)?.context_files||[]),...(state.projects.find(p=>p.id===t.project_id)?.context_urls||[]),...(t.context_files||[]),...(t.context_urls||[])].map(x=>`<span class="tag">${esc(x)}</span>`).join('')||'<span class="hint">未配置；可在项目资料中选择</span>'}</div>${t.discussion_id?'<p class="hint">已关联讨论与共识，执行时会自动带入。</p>':''}</div>
     ${deps.length?`<div class="detail-section"><h3>前置任务</h3><div class="tag-list">${deps.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</div></div>`:''}
     ${children.length?`<div class="detail-section"><h3>接下来依赖这张卡</h3><div class="tag-list">${children.map(x=>`<span class="tag">${esc(x.title)} · ${esc(statusText[x.status])}</span>`).join('')}</div></div>`:''}
@@ -98,7 +113,7 @@ function drawDrawer() {
     <div class="detail-section"><h3>Python 验收证据</h3><div class="checks">${checkRows}</div></div>
     ${t.status==='decision' && run?.decision?`<div class="decision-panel"><h3>只需要你决定这一点</h3><p>${esc(run.decision.question)}</p><div class="decision-options">${(run.decision.options||[]).map(x=>`<button class="ghost" data-answer="${esc(x)}">${esc(x)}</button>`).join('')}</div><textarea id="decision-answer" rows="3" placeholder="也可以写自己的决定"></textarea><button class="primary" data-action="answer">提交决定并继续</button></div>`:''}
     ${t.status==='review' && t.mode==='implement' && !run?.automated_check_passed?'<div class="warning">这张卡还没有自动编译通过的证据；接入前请查看结果或先配置项目检查。</div>':''}
-    ${t.status==='review' && t.mode==='implement' && run?.automated_check_passed?'<div class="warning">自动编译已过，但画面、手感和玩法仍需要你查看；Python 无法判断这些体验。</div>':''}
+    ${t.status==='review' && t.mode==='implement' && run?.automated_check_passed?`<div class="warning">${t.mission_id?'固定验收与独立审查已通过。请查收实际结果，确认后接入原项目。':'自动检查已通过。请结合项目的实际体验和未验证事项查收结果。'}</div>`:''}
     <div class="detail-actions">${actions}</div>
     ${run?`<div class="detail-section"><h3>跨模型任务胶囊</h3><div id="capsule-box" class="result-box">读取中…</div></div><div class="detail-section"><h3>交付结果</h3><div id="result-box" class="result-box">读取中…</div></div><details class="detail-section"><summary>技术诊断日志（本地私有）</summary><div id="log-box" class="result-box">展开后读取</div></details>
     ${run.image_paths?.length?`<div class="detail-section"><h3>本次生成的画面</h3><div class="image-grid">${run.image_paths.map(p=>`<figure><img src="/api/runs/${encodeURIComponent(run.id)}/image?path=${encodeURIComponent(p)}" alt="${esc(p)}"><figcaption>${esc(p)}</figcaption></figure>`).join('')}</div></div>`:''}
@@ -110,6 +125,8 @@ function drawDrawer() {
 }
 async function act(id,action) {
   const t=state.tasks.find(x=>x.id===id);
+  if (action==='delete') return archiveItem('task',id);
+  if (action==='mission') {closeDrawer();window.AgentBoardAutonomy?.showMission(t.mission_id);return;}
   if (action==='edit') {openTaskForm(t);return;}
   if (action==='discuss') {closeDrawer();showChat(t.id);return;}
   if (action==='accept' && t?.mode==='implement' && !confirm(AgentBoardI18n.translate('接入原项目会复制本次改动。请先查看结果；确认接入吗？'))) return;
@@ -117,7 +134,7 @@ async function act(id,action) {
   const body=action==='answer'?{answer:$('#decision-answer')?.value||''}:{};
   try {await api(`/api/tasks/${id}/${action}`,body);toast(action==='start'?'任务已启动':action==='stop'?'已请求停止':action==='rollback'?'已撤回改动':action==='answer'?'决定已提交，任务继续':'任务已完成');await refresh();} catch(e){toast(e.message);}
 }
-async function refresh(){try{state=await api('/api/state');render();}catch(e){toast(e.message);}}
+async function refresh(){try{state=await api('/api/state');render();}catch(e){if(!window.AgentBoardRestarting)toast(e.message);}}
 function dialog(id){$(id).showModal();}
 function lines(s){return s.split(/[\n,]/).map(x=>x.trim()).filter(Boolean);}
 function openTaskForm(task=null){
@@ -133,6 +150,7 @@ function openTaskForm(task=null){
   form.elements.context_files.value=(task?.context_files||[]).join('\n');
   form.elements.context_urls.value=(task?.context_urls||[]).join('\n');
   form.elements.discussion_id.value=task?.discussion_id||'';
+  updateTaskModelControls(task?.model_options||{});
   dialog('#task-dialog');
 }
 $('#new-task').onclick=()=>openTaskForm();
@@ -142,6 +160,58 @@ $('#budget-button').onclick=async()=>{try{const r=await api('/api/budget/refresh
 $('#close-drawer').onclick=closeDrawer;
 $('#shade').onclick=closeDrawer;
 document.querySelectorAll('.close-dialog').forEach(x=>x.onclick=()=>x.closest('dialog').close());
-$('#task-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const body={title:f.get('title'),description:f.get('description'),project_id:f.get('project_id'),agent:f.get('agent'),mode:f.get('mode'),limit_minutes:Number(f.get('limit_minutes')),allowed_paths:lines(f.get('allowed_paths')),assertions:String(f.get('assertions')||'').split('\n').map(x=>x.trim()).filter(Boolean),depends_on:lines(f.get('depends_on')),auto_start:f.has('auto_start'),fallback_to_deepseek:f.has('fallback_to_deepseek'),context_files:String(f.get('context_files')||'').split('\n').map(x=>x.trim()).filter(Boolean),context_urls:String(f.get('context_urls')||'').split('\n').map(x=>x.trim()).filter(Boolean),discussion_id:f.get('discussion_id')||''};try{await api(editingTask?`/api/tasks/${editingTask}/update`:'/api/tasks',body);$('#task-dialog').close();toast(editingTask?'任务卡已修改':'任务卡已创建');await refresh();}catch(err){toast(err.message);}};
+$('#task-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const body={model_options:e.target.elements.agent.value==='codex'?modelControlValues($('#task-model-options')):{},title:f.get('title'),description:f.get('description'),project_id:f.get('project_id'),agent:f.get('agent'),mode:f.get('mode'),limit_minutes:Number(f.get('limit_minutes')),allowed_paths:lines(f.get('allowed_paths')),assertions:String(f.get('assertions')||'').split('\n').map(x=>x.trim()).filter(Boolean),depends_on:lines(f.get('depends_on')),auto_start:f.has('auto_start'),fallback_to_deepseek:f.has('fallback_to_deepseek'),context_files:String(f.get('context_files')||'').split('\n').map(x=>x.trim()).filter(Boolean),context_urls:String(f.get('context_urls')||'').split('\n').map(x=>x.trim()).filter(Boolean),discussion_id:f.get('discussion_id')||''};try{await api(editingTask?`/api/tasks/${editingTask}/update`:'/api/tasks',body);$('#task-dialog').close();toast(editingTask?'任务卡已修改':'任务卡已创建');await refresh();}catch(err){toast(err.message);}};
 $('#project-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{const result=await api('/api/projects',{name:f.get('name'),path:f.get('path'),protected_paths:lines(f.get('protected_paths')),check:f.get('check'),context_files:String(f.get('context_files')||'').split('\n').map(x=>x.trim()).filter(Boolean),context_urls:String(f.get('context_urls')||'').split('\n').map(x=>x.trim()).filter(Boolean)});activeProject=result.data.id;$('#project-dialog').close();toast('项目已添加');await refresh();}catch(err){toast(err.message);}};
+
+function ensureTrashUI() {
+  if (!$('#open-trash')) {
+    const button=document.createElement('button');
+    button.id='open-trash';button.className='side-action';button.onclick=()=>{renderTrash();$('#trash-dialog').showModal();};
+    $('#open-settings').insertAdjacentElement('afterend',button);
+    const modal=document.createElement('dialog');modal.id='trash-dialog';modal.className='dialog trash-dialog';
+    modal.innerHTML='<div class="dialog-head"><h2 id="trash-title"></h2><label class="language-control"><select data-language aria-label="Language"><option value="zh-CN">中文</option><option value="en">English</option></select></label><button class="icon" id="close-trash" aria-label="Close">×</button></div><p id="trash-help" class="hint"></p><div id="trash-items"></div>';
+    document.body.append(modal);$('#close-trash').onclick=()=>modal.close();
+    const notice=document.createElement('div');notice.id='archive-notice';notice.className='archive-notice hidden';notice.setAttribute('role','status');document.body.append(notice);
+  }
+}
+function renderTrash() {
+  ensureTrashUI();
+  const trash=state.trash||{projects:[],tasks:[]}, count=trash.projects.length+trash.tasks.length;
+  $('#open-trash').textContent=uxText('♧ 回收站','♧ Recycle bin')+(count?' · '+count:'');
+  $('#open-trash').title=uxText('查看和恢复已删除的项目与任务','Restore deleted projects and tasks');
+  $('#trash-title').textContent=uxText('回收站','Recycle bin');
+  $('#trash-dialog [data-language]').value=AgentBoardI18n.language;
+  $('#trash-help').textContent=uxText('删除会隐藏记录，保留电脑里的文件、聊天和执行结果。恢复后不会自动启动任务。删除任务不会撤回已接入的文件改动。','Deleted records are hidden. Local files, chats and results are kept. Restoring never starts a task or reverts accepted file changes.');
+  const signature=JSON.stringify([trash,AgentBoardI18n.language]);if(renderTrash.signature===signature)return;renderTrash.signature=signature;
+  const row=(kind,item)=>'<div class="trash-row"><div><span class="trash-kind">'+uxText(kind==='project'?'项目':'任务',kind==='project'?'PROJECT':'TASK')+'</span><strong data-trash-user-value>'+esc(item.name||item.title)+'</strong><small data-trash-user-value>'+esc(kind==='project'?item.path:item.project_name)+'</small>'+(kind==='project'?'<small>'+uxText('包含 '+item.task_count+' 张任务卡和项目聊天','Includes '+item.task_count+' task cards and project chats')+'</small>':'')+'</div><button class="ghost" data-restore-kind="'+kind+'" data-restore-id="'+esc(item.id)+'">'+uxText(kind==='project'?'恢复项目':'恢复任务',kind==='project'?'Restore project':'Restore task')+'</button></div>';
+  $('#trash-items').innerHTML=trash.projects.map(item=>row('project',item)).concat(trash.tasks.map(item=>row('task',item))).join('')||'<div class="trash-empty">'+trashIcon+'<strong>'+uxText('回收站是空的','The recycle bin is empty')+'</strong><p>'+uxText('删除后的项目和任务会在这里保留，可随时恢复。','Deleted projects and tasks will appear here for recovery.')+'</p></div>';
+  $('#trash-items').querySelectorAll('[data-restore-id]').forEach(b=>b.onclick=()=>restoreItem(b.dataset.restoreKind,b.dataset.restoreId,b));
+}
+function archiveNotice(kind,id) {
+  const notice=$('#archive-notice');clearTimeout(archiveNotice.timer);
+  notice.innerHTML='<span>'+uxText(kind==='project'?'项目已移入回收站':'任务已移入回收站',kind==='project'?'Project moved to recycle bin':'Task moved to recycle bin')+'</span><button class="ghost" id="undo-archive">'+uxText('撤销','Undo')+'</button><button class="archive-notice-close" aria-label="Close">×</button>';
+  notice.classList.remove('hidden');notice.dataset.record=id;
+  $('#undo-archive').onclick=()=>restoreItem(kind,id,$('#undo-archive'));
+  notice.querySelector('.archive-notice-close').onclick=()=>notice.classList.add('hidden');
+  archiveNotice.timer=setTimeout(()=>notice.classList.add('hidden'),12000);
+}
+async function archiveItem(kind,id) {
+  const key=kind+':'+id;if(archiveBusy.has(key))return;archiveBusy.add(key);
+  try {
+    await api('/api/'+(kind==='project'?'projects':'tasks')+'/'+encodeURIComponent(id)+'/delete',{});
+    if(kind==='project'||activeTask===id)closeDrawer();
+    await refresh();archiveNotice(kind,id);
+  } catch(e){toast(e.message);}finally{archiveBusy.delete(key);}
+}
+async function restoreItem(kind,id,button) {
+  const key=kind+':'+id;if(archiveBusy.has(key))return;archiveBusy.add(key);if(button)button.disabled=true;
+  try {
+    await api('/api/'+(kind==='project'?'projects':'tasks')+'/'+encodeURIComponent(id)+'/restore',{});
+    if(kind==='project')activeProject=id;
+    if($('#archive-notice').dataset.record===id)$('#archive-notice').classList.add('hidden');
+    await refresh();toast(uxText(kind==='project'?'项目已恢复':'任务已恢复',kind==='project'?'Project restored':'Task restored'));
+  }catch(e){toast(e.message);}finally{archiveBusy.delete(key);if(button?.isConnected)button.disabled=false;}
+}
+document.addEventListener('agentboard:language',()=>{renderTrash();if(state.projects.length)render();});
+
 refresh();setInterval(refresh,3000);

@@ -43,6 +43,30 @@ def seed_demo():
             ]}
     board.STATE = {"version": 1, "projects": [project], "tasks": tasks, "runs": [], "chats": [chat],
                    "budget": {"codex_5h_remaining": None, "observed_at": None}}
+    policy = {"max_attempts": 3, "total_minutes": 90, "attempt_minutes": 25, "auto_resume": True,
+              "checks": [{"kind": "python_unittest", "name": "Fixed acceptance tests"}]}
+    missions = []
+    for key, title, goal, phase, attempt in [
+        ("search", "Build a calmer search experience", "Support fast local search, clear empty states and reliable keyboard navigation.", "building", 1),
+        ("import", "Make note imports dependable", "Validate imported notes, preserve original files and explain unsupported formats.", "review", 2),
+        ("export", "Export a clean reading copy", "Create a readable export with stable headings and useful error messages.", "paused", 0),
+    ]:
+        mission = {"id": "demo-delivery-" + key, "task_id": "demo-review", "project_id": project["id"],
+            "title": title, "goal": goal + " [SAMPLE — no model or tests were run]", "phase": phase,
+            "attempt": attempt, "policy": policy, "spent_seconds": 276 if phase == "review" else 95 if phase == "building" else 0,
+            "next_phase": "review" if phase == "review" else "build", "created_at": timestamp, "updated_at": timestamp,
+            "stage_started_at": None, "error": "", "history": [], "invocations": [],
+            "plan": {"summary": "An illustrative plan with a focused scope and fixed checks.",
+                     "steps": ["Read the project context and acceptance tests", "Implement the smallest complete change", "Run fixed tests and independently review the result"], "risks": []} if attempt else None,
+            "checks": [{"id": "check-1", "kind": "python_unittest", "name": "Fixed acceptance tests", "passed": True,
+                        "tests": 12, "detail": "ILLUSTRATIVE SAMPLE: twelve passing tests. No real test process was run."}] if phase == "review" else [],
+            "review_result": {"verdict": "pass", "summary": "Sample review: input validation and original-file protection are covered.", "findings": []} if phase == "review" else None,
+            "receipt": {"summary": "Illustrative delivery: note imports now validate inputs and preserve original files. This is sample data, not a real execution.",
+                        "tests": 12, "attempts": 2, "changes": [{"path": "src/importer.py", "change": "modified"}],
+                        "artifacts": [], "checks_passed": 1, "checks_total": 1} if phase == "review" else None,
+            "demo": True}
+        missions.append(mission)
+    board.STATE["autonomy_demo"] = missions
     board.save()
 
 

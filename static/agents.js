@@ -14,7 +14,7 @@ function renderAgents(){
   $('#manage-agents').disabled=!state.agent_catalog;
   $('#manage-agents').textContent=state.agent_catalog?say('⚙ Agent 管理','⚙ Manage agents'):say('⚙ Agent 管理（需重启）','⚙ Manage agents (restart required)');
   if(!state.demo)$('#agent-status').innerHTML=profiles().filter(p=>p.enabled).map(p=>`<span class="mini-badge ${p.configured?'ok':''}">${esc(p.name)}${p.kind==='mock'?' [SIMULATION]':''}</span>`).join('');
-  const signature=JSON.stringify(profiles())+AgentBoardI18n.language;
+  const signature=JSON.stringify([profiles(),state.model_settings])+AgentBoardI18n.language;
   if(signature===agentOptionsSignature)return;
   agentOptionsSignature=signature;
   for(const select of [document.querySelector('#task-form [name=agent]'),$('#chat-agent')]){
@@ -46,6 +46,10 @@ function renderRoomMembers(){
 function selectedMembers(){return Array.from($('#chat-room-members').querySelectorAll('input:checked')).map(el=>el.value);}
 function renderAgentList(){
   $('#agent-list').innerHTML=profiles().map(p=>`<article class="agent-setting"><strong data-agent-name>${esc(p.name)}</strong> <code>/${esc(p.id)}</code> <span>${esc(p.kind)}${p.kind==='mock'?' · SIMULATION':''}</span><p>${p.configured?say('配置检查通过；未验证真实账号','Configuration present; live account not verified'):say('程序或密钥环境变量未就绪','Executable or key environment variable missing')} · ${p.enabled?say('已启用','Enabled'):say('已停用','Disabled')}</p><button type="button" class="ghost" data-agent-check="${esc(p.id)}">${say('检查配置（不调用模型）','Check configuration (no model call)')}</button>${p.kind!=='builtin'?` <button type="button" class="ghost" data-agent-edit="${esc(p.id)}">${say('编辑','Edit')}</button>`:''}</article>`).join('');
+  const deepseekArticle=Array.from($('#agent-list').children).find(el=>el.querySelector('code')?.textContent==='/deepseek');
+  if(deepseekArticle)deepseekArticle.insertAdjacentHTML('beforeend',`<p class="hint">${say('此连接跟随Harness配置，暂未开放模型与推理档位覆盖。','This connection follows the Harness profile; model and reasoning overrides are not available yet.')}</p>`);
+  const codexArticle=Array.from($('#agent-list').children).find(el=>el.querySelector('code')?.textContent==='/codex');
+  if(codexArticle){codexArticle.insertAdjacentHTML('beforeend','<div id="codex-model-settings"></div>');renderModelSettings();}
   document.querySelectorAll('[data-agent-edit]').forEach(b=>b.onclick=()=>fillAgentForm(profiles().find(p=>p.id===b.dataset.agentEdit)));
   document.querySelectorAll('[data-agent-check]').forEach(b=>b.onclick=async()=>{try{const result=(await api('/api/agents/check',{id:b.dataset.agentCheck})).data;$('#agent-check-result').textContent=(result.configured?say('本地配置检查通过。','Local configuration present.'):say('配置未就绪。','Configuration is incomplete.'))+' '+say('没有调用模型；登录状态和服务连接仍未验证。','No model was called; authentication and provider connectivity remain unverified.');}catch(e){toast(e.message);}});
 }

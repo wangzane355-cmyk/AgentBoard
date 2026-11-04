@@ -9,21 +9,21 @@
   <link rel="stylesheet" href="/static/layout.css">
   <link rel="stylesheet" href="/static/chat.css">
   <link rel="stylesheet" href="/static/themes.css">
+  <link rel="stylesheet" href="/static/workspace.css">
   <script src="/static/appearance.js"></script>
 </head>
 <body>
   <div class="shell">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark">◈</span><div><strong>AgentBoard</strong><small>本地任务调度</small></div></div>
+      <div class="brand"><span class="brand-mark">A<span class="brand-orbit"></span></span><div><strong>AgentBoard</strong><small data-m-zh="自主协作工作台" data-m-en="Autonomous workspace">自主协作工作台</small></div></div>
       <div class="side-label">工作空间</div>
       <nav id="project-nav" class="project-nav"></nav>
       <button id="add-project" class="side-action">＋ 添加项目</button>
       <button id="manage-agents" class="side-action">⚙ Agent 管理</button>
-      <button id="open-chat" class="side-action">◌ 与 Agent 对话</button>
-      <button id="open-group-chat" class="side-action">◎ Agent 群聊</button>
+      <button id="open-chat" class="side-action">◌ Agent 对话</button>
       <button id="open-settings" class="side-action">◐ 设置</button>
       <div class="sidebar-bottom">
-        <div class="connection"><span class="pulse"></span> Python 看门脚本运行中</div>
+        <div class="connection" id="supervisor-connection"><span class="pulse"></span><span>正在连接监督器</span></div>
         <div id="agent-status" class="agent-status"></div>
         <div class="tiny">运行和文件检查由 Python 完成。所有任务在隔离副本执行。</div>
       </div>
@@ -33,11 +33,13 @@
         <div><div class="eyebrow">PROJECT BOARD</div><h1 id="project-title">任务看板</h1><p id="project-subtitle">一句临时想法也可以直接建卡。</p></div>
         <div class="top-actions"><label class="language-control"><span>中文 / EN</span><select id="language-select" aria-label="Language / 界面语言"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label><button id="budget-button" class="ghost" title="点击自动刷新用量">Codex 5h：读取中</button><button id="plan-next" class="soft">商量下一步</button><button id="project-context" class="ghost">项目资料</button><button id="refresh" class="ghost">刷新</button><button id="new-task" class="primary">＋ 新任务</button></div>
       </header>
-      <section class="overview">
+      <nav class="workspace-tabs" aria-label="Workspace views / 工作区视图"><button type="button" data-workspace="autonomy" class="active" role="tab" aria-selected="true"><span data-m-zh="自主交付" data-m-en="Deliveries">自主交付</span><span class="tab-count" id="mission-tab-count">0</span></button><button type="button" data-workspace="board" role="tab" aria-selected="false">任务看板</button><span class="workspace-mode">LOCAL WORKSPACE</span></nav>
+      <section id="autonomy-workspace" aria-label="自主交付中心"></section>
+      <section class="overview" data-board-only>
         <div class="overview-item"><span>运行中</span><strong id="metric-running">0</strong></div>
         <div class="overview-item"><span>待你处理</span><strong id="metric-review">0</strong></div>
         <div class="overview-item"><span>已完成</span><strong id="metric-done">0</strong></div>
-        <div class="overview-note">Codex / DeepSeek 可按任务自由选择。默认不自动调用 Codex。</div>
+        <div class="overview-note">任务在隔离副本中执行，接入原项目由你决定。</div>
       </section>
       <section id="board" class="board" aria-label="任务看板"></section>
     </main>
@@ -61,6 +63,7 @@
         <label>任务方式<select name="mode"><option value="explore">先调查，不改文件</option><option value="implement">开发，修改隔离副本</option></select></label>
         <label>最多运行几分钟<input name="limit_minutes" type="number" min="1" max="240" value="25"></label>
       </div>
+      <div id="task-model-options" class="hidden detail-section"><p class="hint">仅覆盖这张任务的Codex设置，自动改派DeepSeek时不传递。</p><div class="model-controls"><label>模型版本<select data-model-select aria-label="任务模型版本"></select></label><label>推理强度<select data-effort-select aria-label="任务推理强度"></select></label></div></div>
       <label>允许修改的相对路径 <span class="hint">开发任务必填，一行一个；如 Assets/Scripts/UI/**</span><textarea name="allowed_paths" rows="3" placeholder="Assets/Scripts/UI/**"></textarea></label>
       <label>Python 验收规则 <span class="hint">可留空，一行一条；exists:路径 / absent:路径 / contains:路径 | 文字</span><textarea name="assertions" rows="3" placeholder="exists:Assets/Scripts/UI/TrainingPanel.cs"></textarea></label>
       <details class="detail-section"><summary>任务补充资料（自动继承项目资料，可留空）</summary><label>额外的本地文件或文件夹<textarea name="context_files" rows="3" placeholder="一行一个绝对路径，例如 D:\项目\Docs\开发日志.md"></textarea></label><label>额外的网址<textarea name="context_urls" rows="2" placeholder="一行一个 http/https 网址"></textarea></label></details>
@@ -101,14 +104,20 @@
     <form id="consensus-form"><div class="dialog-head"><h2>保存当前共识</h2><button type="button" class="icon-btn close-dialog" aria-label="关闭共识">×</button></div><p class="hint">确认目标、已选方案、待定问题及下一步。共识会随关联任务交给执行者。</p><textarea id="consensus-input" rows="12" maxlength="12000" aria-label="当前共识"></textarea><div class="dialog-foot"><button type="button" class="ghost close-dialog">取消</button><button type="submit" class="primary">保存共识</button></div></form>
   </dialog>
   <dialog id="chat-dialog" class="dialog chat-dialog">
-    <div class="dialog-head"><div><span class="eyebrow">AGENT CHAT</span><h2>与 Agent 对话</h2></div><button type="button" class="icon-btn close-dialog" aria-label="关闭对话">×</button></div>
+    <div class="dialog-head"><div><span class="eyebrow">AGENT CHAT</span><h2>Agent 对话</h2></div><button type="button" class="icon-btn close-dialog" aria-label="关闭对话">×</button></div>
+    <div class="chat-scope-bar">
+      <label class="chat-scope-control"><span data-chat-zh="这次聊什么" data-chat-en="Conversation scope">这次聊什么</span><select id="chat-scope" aria-label="Conversation scope / 讨论范围"><option value="">自由讨论（暂不关联项目）</option></select></label>
+      <button id="chat-new-project" type="button" class="ghost" data-chat-zh="＋ 新建项目" data-chat-en="＋ New project">＋ 新建项目</button>
+      <div class="chat-scope-context"><span id="chat-scope-note"></span><div class="chat-link-actions"><button id="chat-attach-open" type="button" class="ghost" disabled>将当前讨论关联到项目</button><button id="chat-project-from-discussion" type="button" class="ghost" disabled>从这段讨论新建项目</button></div></div>
+      <p id="chat-background-status" class="hint" role="status"></p>
+    </div>
     <div class="chat-layout">
       <aside class="chat-sidebar">
       <details id="chat-settings" class="chat-settings" open>
         <summary>会话与设置 <span>展开 / 收起</span></summary>
         <div class="chat-settings-body">
-        <div class="chat-project-label"><span class="eyebrow">当前项目</span><strong id="chat-project-name"></strong></div>
-        <div class="chat-mode-controls"><label>聊天方式<select id="chat-mode" aria-label="聊天方式"><option value="single">单聊</option><option value="group">Agent 群聊</option></select></label><label>回复对象<select id="chat-agent" aria-label="对话执行者"><option value="all" hidden>发给全体</option><option value="deepseek">DeepSeek</option><option value="codex">Codex</option></select></label></div>
+        <div class="chat-project-label"><span class="eyebrow" data-chat-zh="讨论范围" data-chat-en="CONVERSATION SCOPE">讨论范围</span><strong id="chat-project-name" data-chat-user-value></strong></div>
+        <div class="chat-mode-controls"><label>聊天方式<select id="chat-mode" aria-label="聊天方式"><option value="single">单聊</option><option value="group">Agent 群聊</option></select></label><label>回复对象<select id="chat-agent" aria-label="对话执行者"><option value="all" hidden>发给全体</option><option value="codex" selected>Codex</option><option value="deepseek">DeepSeek</option></select></label></div>
         <fieldset id="chat-room-members" class="hidden"></fieldset>
         <div id="group-chat-help" class="group-chat-help hidden">成员：DeepSeek · Codex。普通消息全体回复；<code>/codex</code> 或 <code>/deepseek</code> 仅指定AI回复。所有消息在房间内共享。</div>
         <div class="chat-focus-panel"><div><strong id="chat-focus-title"></strong><div class="hint">自动带入已关联日志、任务目标、依赖和进度，无需重新介绍。</div></div><button id="chat-start-plan" type="button" class="soft">帮我判断下一步</button></div>
@@ -130,6 +139,27 @@
         <form id="chat-form"><textarea id="chat-input" rows="3" maxlength="12000" placeholder="先聊想法、问问题，或一起整理下一张任务卡…" aria-label="发送给 Agent 的消息" required></textarea><div class="chat-compose-actions"><span class="hint">Ctrl / ⌘ + Enter 发送</span><button id="chat-stop" type="button" class="danger hidden">停止回复</button><button id="chat-send" type="submit" class="primary">发送</button></div></form>
       </section>
     </div>
+  </dialog>
+  <dialog id="chat-attach-dialog" class="dialog chat-project-dialog">
+    <form id="chat-attach-form">
+      <div class="dialog-head"><h2 data-chat-zh="关联这段讨论" data-chat-en="Link this conversation">关联这段讨论</h2><button type="button" class="icon-btn" data-chat-close="chat-attach-dialog" aria-label="Close / 关闭">×</button></div>
+      <p class="hint" data-chat-zh="保留聊天历史。更换项目后，原来关联的任务会解除，旧共识需要重新核对。" data-chat-en="History is preserved. Changing the project removes its task link and marks earlier consensus for review.">保留聊天历史。更换项目后，原来关联的任务会解除，旧共识需要重新核对。</p>
+      <label><span data-chat-zh="关联到" data-chat-en="Link to">关联到</span><select id="chat-attach-project" aria-label="Link conversation to project / 关联讨论到项目"></select></label>
+      <p id="chat-attach-error" class="chat-form-error hidden" role="alert"></p>
+      <div class="dialog-foot"><button type="button" class="ghost" data-chat-close="chat-attach-dialog" data-chat-zh="取消" data-chat-en="Cancel">取消</button><button id="chat-attach-submit" type="submit" class="primary" data-chat-zh="确认关联" data-chat-en="Confirm link">确认关联</button></div>
+    </form>
+  </dialog>
+  <dialog id="chat-project-create-dialog" class="dialog chat-project-dialog">
+    <form id="chat-project-create-form">
+      <div class="dialog-head"><h2 id="chat-project-create-title">新建项目</h2><button type="button" class="icon-btn" data-chat-close="chat-project-create-dialog" aria-label="Close / 关闭">×</button></div>
+      <p id="chat-project-create-note" class="hint"></p>
+      <label><span data-chat-zh="项目名称" data-chat-en="Project name">项目名称</span><input name="name" maxlength="100" required autocomplete="off"></label>
+      <label><span data-chat-zh="本机项目文件夹完整地址" data-chat-en="Full local project folder path">本机项目文件夹完整地址</span><input name="path" required autocomplete="off" placeholder="D:\Projects\MyIdea"></label>
+      <label class="checkline"><input name="create_directory" type="checkbox"><span data-chat-zh="这个地址还不存在，为我创建新文件夹" data-chat-en="Create a new folder if this path does not exist">这个地址还不存在，为我创建新文件夹</span></label>
+      <p class="hint" data-chat-zh="使用已有文件夹时不用勾选。创建项目不会启动模型或开发任务。" data-chat-en="Leave unchecked for an existing folder. Creating a project does not start a model or implementation task.">使用已有文件夹时不用勾选。创建项目不会启动模型或开发任务。</p>
+      <p id="chat-project-create-error" class="chat-form-error hidden" role="alert"></p>
+      <div class="dialog-foot"><button type="button" class="ghost" data-chat-close="chat-project-create-dialog" data-chat-zh="取消" data-chat-en="Cancel">取消</button><button id="chat-project-create-submit" type="submit" class="primary">创建项目</button></div>
+    </form>
   </dialog>
 
   <dialog id="agents-dialog" class="dialog">
@@ -179,7 +209,9 @@
   <script src="/static/app.js"></script>
   <script src="/static/chat.js"></script>
   <script src="/static/context.js"></script>
+  <script src="/static/models.js"></script>
   <script src="/static/agents.js"></script>
   <script src="/static/executors.js"></script>
+  <script src="/static/autonomy.js"></script>
 </body>
 </html>

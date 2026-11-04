@@ -22,7 +22,7 @@ codex login status
 
 AgentBoard reuses that CLI login; it does not ask for or store your OpenAI credentials. See [official authentication guidance](https://learn.chatgpt.com/docs/auth).
 
-The five-hour capacity guard uses `codex app-server` and the signed-in account's quota window. It stops new Codex calls at 15% remaining, on an expired reading or on a read failure. API-key-only authentication may not provide this window and is currently blocked by the guard. Do not assume API billing and subscription quotas are interchangeable.
+The capacity guard uses `codex app-server` and the signed-in account's actual quota windows. It supports five-hour, weekly-only and multiple-window readings. It stops new Codex calls when any readable window reaches 15% remaining, on an expired reading or on a read failure. A missing five-hour value stays unavailable; it is never estimated from a weekly reading. The header names the most constrained window (`5h`, `7d`, or its duration in minutes). API-key-only authentication may not provide usable quota windows and is blocked by the guard. Do not assume API billing and subscription quotas are interchangeable.
 
 On Windows the adapter uses the unelevated workspace sandbox compatibility options. On other platforms those Windows-only options are omitted. Live execution on non-Windows systems is not yet fully validated.
 
@@ -51,17 +51,29 @@ The app's “available” badge detects the command, not whether a model account
 
 There is no preloaded personal project. Your own `data/` is created on first use and stays local.
 
+## Web checks
+
+Static webpage checks require Node 22+ and an installed Edge/Chrome. No npm dependencies are needed: the bundled browser probe uses Node built-in WebSocket and the browser DevTools protocol. It sets exact device metrics and verifies the measured viewport, visible text and horizontal overflow before saving a screenshot. This avoids Chromium’s minimum window-size cropping on narrow screens.
+
 ## Optional checks and environment
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
+| `AGENTBOARD_AUTONOMOUS_WORKERS` | Autonomous task concurrency, 1 or 2 | `1` |
+| `AGENTBOARD_BROWSER_EXECUTABLE` | Optional installed Edge/Chrome executable | Auto-discover |
 | `AGENTBOARD_DATA_DIR` | State, conversations and run logs | `data/` beside the app |
 | `AGENTBOARD_WORKSPACES_DIR` | Isolated source copies | `~/AgentBoardWork` |
 | `AGENTBOARD_DEEPSEEK_ENTRY` | Optional absolute installed CLI or JavaScript entry | Auto-discover installed executors |
 | `AGENTBOARD_DEEPSEEK_PROFILE` | Harness profile compatible with headless stdin/stdout | `headless` |
 | `AGENTBOARD_UNITY_EDITOR_VERSION` | Override editor version for the Unity adapter | Read `ProjectSettings/ProjectVersion.txt` |
 
-Python checks compile files for syntax; they are not a full test runner. The Unity adapter requires a compatible `unity` CLI and installed editor. A missing compiler is reported as an unrun check, not a successful build. Configure and validate the toolchain before relying on it for acceptance.
+Legacy task checks compile Python for syntax. Autonomous delivery additionally runs real unittest/Node tests and configured commands; syntax alone cannot establish delivery. See [autonomous delivery](AUTONOMY.md). The Unity adapter requires a compatible `unity` CLI and installed editor. A missing compiler is reported as an unrun check, not a successful build. Configure and validate the toolchain before relying on it for acceptance.
+
+## Desktop startup
+
+The desktop launcher opens a ready AgentBoard immediately, or starts one hidden background process and waits for its health endpoint and page. A cross-process startup lock protects rapid repeated clicks. Slow startup shows a small progress window and waits up to120seconds for bounded local checks. Closing the progress window cancels that opening attempt; it does not stop existing background work. Startup or browser failures show a visible message with the local URL and private log path.
+
+The launcher uses its current Python executable and a fixed application directory. The command-file fallback prefers the installed Python launcher (`py -3`), then `python`.
 
 ## Troubleshooting
 

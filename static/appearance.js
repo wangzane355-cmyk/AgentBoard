@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const ids = ['default','graphite','construct','obsidian'];
-  let selected='default';
+  let selected='graphite';
   try { const stored=localStorage.getItem('agentboard.theme'); if(ids.includes(stored))selected=stored; } catch (_) { /* Optional local persistence. */ }
   document.documentElement.dataset.theme=selected;
   function choose(id){

@@ -1,93 +1,47 @@
-<p align="center"><img src="docs/assets/hero.svg" alt="AgentBoard — local agent workspace" width="100%"></p>
+<p align="center"><img src="docs/assets/hero.svg" alt="AgentBoard — goals into verified deliveries" width="100%"></p>
 
-<p align="center">
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-7aa2f7"></a>
-  <img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-79c7b4">
-  <img alt="Local first" src="https://img.shields.io/badge/local-first-b6a0ee">
-  <img alt="Status: early release" src="https://img.shields.io/badge/status-early%20release-e3be7b">
-</p>
+<p align="center"><strong>A local workspace for Codex to plan, build, test and repair its work.</strong><br>Give it a goal. Follow the evidence. Review the delivery.</p>
 
-<p align="center"><strong>A shared workspace for planning, delegating and reviewing Codex + DeepSeek work.</strong><br>
-Discuss the plan. Turn decisions into bounded tasks. Let Python supervise the execution.</p>
+<p align="center"><a href="README.zh-CN.md">简体中文</a> · <a href="#quick-start">Quick start</a> · <a href="docs/新手指南.md">Beginner guide (中文)</a> · <a href="docs/AUTONOMY.md">Autonomous delivery guide</a> · <a href="docs/SETUP.md">Setup</a> · <a href="CHANGELOG.md">Changelog</a></p>
 
-<p align="center"><a href="README.zh-CN.md">简体中文</a> · <a href="#quick-start">Quick start</a> · <a href="docs/SETUP.md">Agent setup</a> · <a href="docs/ARCHITECTURE.md">Architecture</a> · <a href="CONTRIBUTING.md">Contribute</a></p>
+## From a goal to a delivery
 
----
+AgentBoard keeps the work moving after the first model response. A durable Python supervisor runs Codex in an isolated project copy, executes fixed acceptance checks, asks a separate Codex session to review the result, and sends concrete failures back for repair. You decide when to integrate the changes into the original project.
 
-## A conversation that leads to a deliverable
-
-AgentBoard connects the discussion and delivery stages of a local project. Codex and DeepSeek share project references and task context. A small Python service handles time limits, file checks and handoff records, so routine supervision does not require another model turn.
-
-| Plan | Delegate | Review |
+| Describe | Let it work | Inspect the result |
 | --- | --- | --- |
-| Discuss next steps with project logs and task dependencies already attached. | Choose an executor, allowed paths, acceptance rules and a time limit. | Read the evidence, inspect changes and explicitly integrate the result. |
+| Choose a project, goal, allowed files and real checks. | Plan → build → program checks → independent review → bounded repair. | Read test output, screenshots, review findings, code diffs and the delivery report. |
 
-## See it in action
+![AgentBoard delivery workspace — read-only sample data](docs/assets/deliveries.png)
 
-### Project board · Graphite theme
+*Public screenshots use the built-in read-only demo. Sample cards are illustrative; they are not evidence of real model execution.*
 
-![AgentBoard task board in English](docs/assets/board.jpg)
+## New in 0.4 — autonomous delivery
 
-### Shared agent room · Obsidian theme
+This source update includes project-free discussion and recoverable task/project deletion. All 176 offline tests passed locally on Windows. Desktop/mobile UI checks covered free discussion with a local simulator, project creation/linking, deletion/restoration and draft preservation.
 
-![AgentBoard shared agent room in English](docs/assets/group-chat.jpg)
+- **Start with an idea.** Agent chat opens in free discussion with Codex selected. No project folder is required, and project references/source snapshots are not attached. A permanent scope selector also opens conversations for an existing project while preserving unsent drafts when switching.
+- **Choose the project when ready.** Explicitly link an idle conversation to an existing project, or create a project from the discussion and keep its history. New folders require an explicit checkbox; project creation does not start a model or task. Active replies continue in the background when you switch conversations.
+- **Keep the board tidy.** Move unused tasks or projects to the recycle bin and restore them later. Project deletion hides its tasks and conversations; local source files, history and integrated changes remain. Restore does not start tasks or undo file changes.
+- **Durable progress.** SQLite checkpoints and an append-only event history survive a service restart. Paused jobs stay paused. Interrupted work returns to its recorded phase when automatic recovery is enabled.
+- **Checks the builder cannot rewrite.** Existing acceptance files are hashed before work. A successful exit with zero discovered tests fails acceptance. Syntax checks alone cannot establish delivery.
+- **Independent review.** A fresh Codex session reviews a read-only snapshot and actual check evidence. Serious findings return the task to the builder, within your round and time limits.
+- **Browser evidence.** Static HTML projects can be opened in an installed Edge/Chrome at desktop and phone sizes. The receipt includes actual PNG captures, measured viewport dimensions, horizontal-overflow and visible-text checks. This does not replace interaction tests or human visual review.
+- **Bounded, controllable execution.** Pause, resume and stop; per-call deadline up to 25 minutes; total time, repair-round and no-progress limits. Python supervises without repeated model polling.
+- **Clearer workspace.** Goal-first home, delivery status filters, detailed receipts, mobile navigation and a right-side agent conversation workspace. Chinese/English and three optional themes remain available.
+- **Read-only diagnostics.** Check CLI/login, actual quota, browser availability and database health. An idle-only restart applies backend updates without terminating unrelated Python processes.
 
-*Screenshots use the built-in, read-only demo workspace. Cards and conversations are illustrative sample data, not reports of real agent execution.*
+## Keep the whole project in context
 
-### Appearance, kept personal
+Discuss an idea before choosing a project, then link the conversation when its direction is clear. Switching the scope selector opens another conversation; moving an existing discussion requires an explicit link action. Linking preserves history, removes the earlier task link and marks old consensus for review.
 
-Three original themes under **Settings → Appearance**, with instant switching, keyboard selection and local preference storage. The original dark theme remains available. [Design notes](docs/APPEARANCE.md)
+For project work, attach development logs, handoffs, local documents and reference pages. Discuss a plan in one shared room, address a single agent with a slash command, save consensus and turn it into a task. Chat's task button creates an ordinary task draft; use **Deliveries** for the autonomous check/review/repair workflow. Task capsules, source diff, protected files, explicit integration and hash-guarded rollback remain available.
 
-![Graphite, Construct and Obsidian theme selector](docs/assets/appearance.jpg)
-
-<details>
-<summary>Compare the three workspace themes</summary>
-
-| Graphite · Minimal | Construct · Burgundy | Obsidian · Metal |
-| --- | --- | --- |
-| [![Graphite workspace](docs/assets/theme-graphite.jpg)](docs/assets/theme-graphite.jpg) | [![Construct workspace](docs/assets/theme-construct.jpg)](docs/assets/theme-construct.jpg) | [![Obsidian workspace](docs/assets/theme-obsidian.jpg)](docs/assets/theme-obsidian.jpg) |
-
-These workspace samples use the Chinese interface. Both interface languages support every theme.
-
-</details>
-
-## New in 0.2.2
-
-| Update | What it enables |
-| --- | --- |
-| **Agent management** | Keep Codex and DeepSeek, add a compatible CLI or Chat Completions adapter, or rehearse with a local simulator without an account. |
-| **Room membership** | Choose invited agents and use `/agent-id` to address one member. Six-reply discussion limits remain in place. |
-| **Local preferences** | Chinese / English switching and three optional workspace themes, without model calls. |
-| **Windows startup fix** | Desktop shortcuts using `pythonw.exe` now handle windowless logging correctly; reopening checks the page response. |
-
-API adapters support discussion and read-only investigation; CLI implementation must be explicitly enabled. Configuration checks do not call a model or verify a live account. [Adapter guide](docs/AGENTS.md) · [Full changelog](CHANGELOG.md)
-
-<details>
-<summary>See the agent management screen</summary>
-
-![Local agent adapter configuration](docs/assets/agents.jpg)
-
-This is the read-only demonstration screen. Availability depends on the local installation; the screenshot does not establish provider authentication.
-
-</details>
-
-
-## What you can do
-
-- **Use Chinese or English.** Switch the interface language in the header or an open dialog. Your browser remembers the choice; project data and conversation text keep their original language.
-- **Choose your executor.** Use Codex, DeepSeek or a configured custom adapter. Try a local simulator without an account. The default task limit is 25 minutes.
-- **Plan together.** Use a shared room, direct an individual agent, or allow a bounded discussion.
-- **Carry project context forward.** Attach local logs, documentation folders or webpages; refresh their snapshots before a turn.
-- **Keep discussions connected to work.** Save a consensus, create a task draft, or update an existing task.
-- **Collect evidence with Python.** Check process exit, allowed paths, protected files, project drift and configured acceptance rules.
-- **Review before integration.** Preview text changes, keep source backups and reject rollback over newer edits.
-- **Protect Codex capacity.** Read the signed-in account's five-hour window and stop new Codex calls at 15% remaining or when the reading fails.
+Codex is the autonomous delivery executor. DeepSeek Harness and custom CLI/API adapters remain available for their documented task or discussion capabilities; they do not automatically inherit the new Codex review loop. Simulators allow configuration rehearsal without an account. [Agent guide](docs/AGENTS.md) · [Model settings](docs/MODEL_SETTINGS.md)
 
 ## Quick start
 
-### 1. Explore without an account
-
-Python 3.10+ is enough for the application and demo. There are no third-party Python runtime dependencies.
+Python 3.10+ is enough for the app. No Python packages, frontend build or cloud account are required for the demo.
 
 ```bash
 git clone https://github.com/wangzane355-cmyk/AgentBoard.git
@@ -95,83 +49,42 @@ cd AgentBoard
 python demo.py
 ```
 
-Open **http://127.0.0.1:8766/**. The demo is read-only and never starts a model.
-
-### 2. Start your own workspace
+Explore the read-only demo at **http://127.0.0.1:8766/**. To use your own projects:
 
 ```bash
 python launch.py
 ```
 
-On Windows, you can also double-click `start.cmd`. Open **http://127.0.0.1:8765/**, add a local project, and attach its reference documents.
+On Windows, double-click `start.cmd`. Open **http://127.0.0.1:8765/** and start a free discussion, or add a project and attach its reference files when ready to work on it. Install and authenticate the [official Codex CLI](https://github.com/openai/codex) for real autonomous jobs; AgentBoard reuses the local login. Node is needed for Node tests; webpage checks use Node 22+ built-ins and installed Edge/Chrome, with no npm packages. Diagnostics never calls a model. [Setup guide](docs/SETUP.md)
 
-Live work additionally needs the executor you choose:
-- **Codex:** install and authenticate the [Codex CLI](https://github.com/openai/codex).
-- **DeepSeek:** install [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) and configure the `headless` profile's credentials.
+1. Explore an idea in **Agent chat**, or write a small, specific project goal on **Deliveries**.
+2. Select a fixed verification recipe, scope and limits. Save a draft or explicitly start.
+3. Follow progress or leave the service running. Failures feed the repair loop.
+4. Inspect the receipt and diff. **Accept** integrates checked changes; **Revert** restores the recorded original if no newer edits conflict.
 
-See the [setup guide](docs/SETUP.md) before the first live call. Accounts and model access are supplied by each user.
+## Real limits, visible evidence
 
-## Group chat, without an endless loop
+The account guard reads the signed-in Codex account's actual available quota windows, including weekly-only readings. It blocks new Codex calls at 15% remaining, on stale readings, unavailable quota or account restrictions. Missing five-hour capacity stays unavailable. Reported invocation tokens are not a prediction of subscription capacity.
 
-| Send | Result |
-| --- | --- |
-| A normal message to **All** | Each member replies once, sequentially. |
-| `/codex Review this plan` | Only Codex is invoked. |
-| `/deepseek Propose the smallest implementation` | Only DeepSeek is invoked. |
-| `/讨论 2 Compare the approaches` | Agents may request handoffs, with at most four replies. |
+The default is one autonomous worker; an opt-in environment setting allows two. Total limits and checks apply to each job. Chat reply budgets remain bounded to six replies, with strict directed routing.
 
-Directed messages remain in shared history. Other members read that history when next invited; they are not invoked just to remain silent. Discussions are limited to three rounds / six replies and a 25-minute batch deadline. You can stop the active reply and cancel pending speakers.
+**This is a local early release, primarily verified on Windows.** Source copies and hash checks are not an OS security boundary. Use trusted projects. The loopback service is intended for one local user and has no public-hosting authentication. Private state, transcripts, receipts and worker copies remain outside source releases. No automatic GitHub publication or source integration happens at delivery. Deletion of source files is not automatically integrated.
 
-## From a task card to reviewed changes
+Automatic recovery requires the Python service to be running again; this release does not install an OS boot service. Recovery uses recorded work and fresh Codex sessions, not a continuously preserved model process. General browser interaction automation, automatic long-history summarization and token-by-token chat streaming are not implemented. Linux/macOS live-executor behavior has not been fully validated.
 
-```mermaid
-flowchart LR
-    P[Project references] --> C[Discuss and save consensus]
-    C --> T[Bounded task card]
-    T --> W[Isolated source copy]
-    W --> A[Codex or DeepSeek]
-    A --> V[Python checks]
-    V --> R[Human review]
-    R --> I[Integrate approved changes]
-```
-
-Agents work in source copies. Python records the original project and protected-file hashes, checks allowed changes, and rechecks the source before integration. Completed dependencies can pass a task capsule to the next card.
-
-Acceptance rules support `exists:path`, `absent:path` and `contains:path | text`. Python syntax checks and an optional Unity CLI compilation adapter are included. Visual quality, gameplay and product decisions still require human review.
-
-## Status and boundaries
-
-**Early release. Windows is the primary manually verified environment.** The offline suite is suitable for CI; Linux/macOS live-executor behavior has not been fully validated.
-
-- The web service binds to loopback and is intended for one trusted local user. It has no public hosting or multi-user authentication layer.
-- Source copies and after-the-fact checks do not replace OS sandboxing. Use trusted projects and review executor permissions.
-- Private state stays in `data/`; worker copies default to `~/AgentBoardWork/`. These directories are excluded from version control.
-- Replies appear when complete; token-by-token streaming and automatic long-history summaries are not implemented.
-- There is one active task worker and one active chat batch. Chat is for discussion and read-only investigation.
-- File deletion is not automatically integrated. Rollback refuses to overwrite subsequent edits.
-- Codex quota protection currently expects ChatGPT-authenticated CLI quota information. API-key-only setups may not expose that window and will be blocked by this guard.
-- CLI versions, authentication and sandbox capabilities can affect live execution. The app does not install executors or manage your account credentials.
-- Built-in Codex and DeepSeek adapters can be extended through **Manage agents** with local simulators, stdin/stdout executors and compatible APIs. See [adding agents](docs/AGENTS.md) for supported contracts and verification limits.
-
-## Development
+## Development and distribution
 
 ```bash
-python -m unittest -v test_server.py test_context_sources.py test_group_chat.py test_agent_registry.py test_launch.py test_executor_discovery.py test_managed_executors.py
-node --check static/executors.js
-node --check static/agents.js
-node --check static/i18n.js
-node --check static/app.js
-node --check static/chat.js
-node --check static/context.js
+python -m unittest discover -v
+node --check static/autonomy.js
+python doctor.py
+python package_release.py
 ```
 
-The offline suite uses temporary projects and fake executors. Live smoke scripts are explicitly separate because they can consume model usage.
+Offline tests use temporary projects and fake model responses. Live model trials are separate. The source packaging command uses an explicit public-file whitelist and produces a SHA256 manifest; local runtime data and credentials are excluded. The local 0.4 working tree and archive are separate from any published GitHub release.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and [CHANGELOG.md](CHANGELOG.md) for details.
+[Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Agent handoff](DEEPSEEK_HANDOFF.md) · [Research and sources](docs/AUTONOMY_RESEARCH_2026-11-03.md)
 
-## License and acknowledgments
+## License
 
-[MIT](LICENSE). Built with Python's standard library and plain HTML, CSS and JavaScript.
-
-The interface draws inspiration from task-board workflows such as [Vibe Kanban](https://github.com/BloopAI/vibe-kanban); its code is not bundled here. Codex and DeepSeek Harness are external executors with their own licenses and terms. AgentBoard is an independent project and is not affiliated with OpenAI or DeepSeek.
-
+[MIT](LICENSE). Built with the Python standard library and plain HTML/CSS/JavaScript. AgentBoard is independent of OpenAI and DeepSeek. External executors retain their own licenses and terms. Task-board inspiration includes [Vibe Kanban](https://github.com/BloopAI/vibe-kanban); its code is not bundled.

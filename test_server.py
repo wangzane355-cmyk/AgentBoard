@@ -49,6 +49,93 @@ class BoardTests(unittest.TestCase):
         self.assertEqual(self.board.initial_state()["projects"], [])
         self.assertEqual(self.board.initial_state()["chats"], [])
 
+    def test_autonomous_task_is_linked_and_does_not_invoke_model_when_saved(self):
+        mission = self.board.create_autonomous_task({"title": "自主验收", "description": "修改sample",
+            "project_id": "test", "allowed_paths": ["sample.py"], "start": False,
+            "policy": {"checks": [{"kind": "python_unittest", "modules": ["test_sample"]}]}})
+        self.assertEqual(mission["phase"], "paused")
+        task = self.board.find_task(mission["task_id"])
+        self.assertEqual(task["agent"], "codex")
+        self.assertFalse(task["fallback_to_deepseek"])
+        self.assertEqual(task["mission_id"], mission["id"])
+        self.assertEqual(task["run_ids"], [mission["id"]])
+        service = self.board.autonomy_service()
+        service.runtime.attach(service.store.get(mission["id"]))
+        self.assertEqual(task["run_ids"], [mission["id"]])
+        self.assertEqual(len(self.board.STATE["runs"]), 1)
+        self.assertFalse(service.status()["running"])
+
+    def test_recovery_does_not_rebaseline_tampered_delivered_workspace(self):
+        mission = self.board.create_autonomous_task({"title": "自主验收", "description": "修改sample",
+            "project_id": "test", "allowed_paths": ["sample.py"], "start": False,
+            "policy": {"checks": [{"kind": "python_unittest", "modules": ["test_sample"]}]}})
+        service = self.board.autonomy_service()
+        prepared = service.runtime.prepare(mission)
+        workspace = Path(prepared["workspace"])
+        (workspace / "sample.py").write_text("value = 2\n", encoding="utf-8")
+        mission = service.store.update(mission["id"], {**prepared,
+            "checks": [{"name": "offline fixture", "passed": True, "tests": 1, "detail": "fixture"}],
+            "review_result": {"verdict": "pass", "summary": "offline fixture", "findings": []}})
+        receipt = service.runtime.receipt(mission, service.runtime.integrity(mission))
+        checkpoint = service.runtime.workspace_snapshot(mission)
+        service.change(mission["id"], {"phase": "review", "receipt": receipt, "workspace_after": checkpoint}, "fixture", "offline fixture")
+        (workspace / "sample.py").write_text("value = 999\n", encoding="utf-8")
+        service._recover()
+        with self.assertRaisesRegex(ValueError, "隔离工作区"):
+            self.board.accept_task(mission["task_id"])
+        self.assertEqual((self.source / "sample.py").read_text(encoding="utf-8"), "value = 1\n")
+
+    def test_import_does_not_normalize_or_write_existing_live_state(self):
+        state_path = self.board.STATE_FILE
+        before = state_path.read_bytes()
+        with patch.dict(os.environ, {"AGENTBOARD_DATA_DIR": str(self.board.DATA),
+                                    "AGENTBOARD_WORKSPACES_DIR": str(self.board.WORKSPACES), "AGENTBOARD_TEST_MODE": "1"}):
+            spec = importlib.util.spec_from_file_location("second_readonly_import", Path(__file__).with_name("server.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+        self.assertEqual(state_path.read_bytes(), before)
+
+    def test_model_override_snapshot_keeps_guards_and_does_not_follow_edits(self):
+        from model_settings import ModelSettings
+        import json
+        home = Path(self.tmp.name) / "codex"
+        home.mkdir()
+        (home / "models_cache.json").write_text(json.dumps({"models": [{"slug": "fixture", "visibility": "list", "supported_reasoning_levels": [{"effort": "low"}, {"effort": "high"}]}]}), encoding="utf-8")
+        self.board.MODELS = ModelSettings(self.board.DATA, home)
+        self.board.MODELS.save({"model": "fixture", "reasoning_effort": "low"})
+        task = self.board.create_task({"title": "fixture", "description": "offline", "project_id": "test", "agent": "codex", "mode": "explore", "fallback_to_deepseek": False, "model_options": {"reasoning_effort": "high"}})
+        self.board.STATE["budget"].update(codex_5h_remaining=90, observed_at=self.board.now())
+        with patch.object(self.board.threading, "Thread"):
+            run = self.board.start_task(task["id"])["run"]
+        self.assertEqual(run["execution_config"], {"model": "fixture", "reasoning_effort": "high"})
+        self.board.MODELS.save({})
+        self.board.TEST_MODE = False  # Inspect argument construction only; no subprocess.
+        with patch.object(self.board.shutil, "which", return_value="codex"):
+            cmd = self.board.command_for({**task, "execution_config": run["execution_config"]}, self.source, self.board.DATA)
+        self.assertIn('--model', cmd)
+        self.assertIn('model_reasoning_effort="high"', cmd)
+        self.assertIn('sandbox_workspace_write.network_access=false', cmd)
+        self.assertIn('approval_policy=never', cmd)
+
+    def test_quota_fallback_does_not_pass_codex_model_to_deepseek(self):
+        task = self.task()
+        task.update(agent="codex", model_options={"model": "unavailable-after-fallback"})
+        with patch.object(self.board.threading, "Thread"):
+            run = self.board.start_task(task["id"])["run"]
+        self.assertEqual(run["agent"], "deepseek")
+        self.assertEqual(run["execution_config"], {})
+
+    def test_model_settings_are_blocked_during_tasks_and_group_batches(self):
+        self.board.STATE["runs"] = [{"agent": "codex", "status": "preparing"}]
+        with self.assertRaises(ValueError):
+            self.board.save_model_settings({})
+        self.board.STATE["runs"] = []
+        self.board.STATE["chats"] = [{"agent": "deepseek", "members": ["codex", "deepseek"], "status": "running"}]
+        with self.assertRaises(ValueError):
+            self.board.save_model_settings({})
+        self.board.STATE["chats"] = []
+        self.assertEqual(self.board.save_model_settings({})["codex"]["preferences"], {"model": "", "reasoning_effort": ""})
+
     def test_http_page_works_without_console_error_stream(self):
         from urllib.request import urlopen
         server = self.board.ThreadingHTTPServer(("127.0.0.1", 0), self.board.Handler)
@@ -224,6 +311,21 @@ class BoardTests(unittest.TestCase):
             self.board.execute_run(run["id"])
         self.assertEqual(self.board.find_task(task["id"])["status"], "blocked")
         self.assertIn("受保护", self.board.find_run(run["id"])["error"])
+
+    def test_weekly_only_quota_allows_codex_tasks_and_chat(self):
+        from usage_probe import summarize_rate_limits
+        self.board.STATE["budget"] = summarize_rate_limits({"ordinaryUsageAllowed": True,
+            "rateLimits": {"primary": {"windowDurationMins": 10080, "usedPercent": 23}}})
+        task = self.board.create_task({"title": "weekly account", "description": "offline",
+            "project_id": "test", "agent": "codex", "mode": "explore", "fallback_to_deepseek": False})
+        with patch.object(self.board.threading, "Thread"):
+            run = self.board.start_task(task["id"])["run"]
+        self.assertEqual(run["agent"], "codex")
+        self.assertEqual(run["budget_note"], "")
+        self.board.guard_codex_chat_budget()
+        self.board.STATE["budget"]["quota_windows"][0]["remaining_percent"] = 15
+        with self.assertRaises(ValueError):
+            self.board.guard_codex_chat_budget()
 
     def test_low_codex_budget_falls_back_without_starting_codex(self):
         self.board.STATE["budget"] = {"codex_5h_remaining": 15, "observed_at": self.board.now()}

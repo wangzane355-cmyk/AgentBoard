@@ -2,6 +2,12 @@
 (() => {
   'use strict';
   const catalog = Object.fromEntries(String.raw`
+模型版本	Model version
+推理强度	Reasoning effort
+任务模型版本	Task model version
+任务推理强度	Task reasoning effort
+仅覆盖这张任务的Codex设置，自动改派DeepSeek时不传递。	Overrides Codex for this task only. Not forwarded when falling back to DeepSeek.
+
 ◐ 设置	◐ Settings
 设置	Settings
 关闭设置	Close settings
@@ -52,6 +58,8 @@ Agent 管理	Manage agents
 工作空间	Workspaces
 ＋ 添加项目	＋ Add project
 ◌ 与 Agent 对话	◌ Chat with an agent
+◌ Agent 对话	◌ Agent chat
+Agent 对话	Agent chat
 ◎ Agent 群聊	◎ Agent room
 Python 看门脚本运行中	Python supervisor running
 运行和文件检查由 Python 完成。所有任务在隔离副本执行。	Python supervises execution and file checks. Tasks run in isolated copies.
@@ -269,7 +277,9 @@ Agent 正在回复，关闭面板后仍会继续。	Agent is replying; closing t
 `.trim().split('\n').map(line => line.split('\t')));
 
   const patterns = [
-    [/^Codex 5h：剩余 (\d+(?:\.\d+)?)%( · 已过期)?$/, (_, n, stale) => `Codex 5h: ${n}% remaining${stale ? ' · stale' : ''}`],
+    [/^(Codex(?: (?:5h|7d|[0-9.]+m))?)：读取失败 · 点击重试$/, (_, label) => `${label}: unavailable · retry`],
+    [/^(Codex(?: (?:5h|7d|[0-9.]+m))?)：读取中$/, (_, label) => `${label}: loading`],
+    [/^(Codex(?: (?:5h|7d|[0-9.]+m))?)：剩余 (\d+(?:\.\d+)?)%( · 已过期)?$/, (_, label, n, stale) => `${label}: ${n}% remaining${stale ? ' · stale' : ''}`],
     [/^(Codex|DeepSeek) (可用|未找到)$/, (_, name, status) => `${name} ${catalog[status]}`],
     [/^(\d+) 分钟$/, (_, n) => `${n} minutes`],
     [/^准备中 \/ (\d+):00$/, (_, n) => `Preparing / ${n}:00`],
@@ -301,7 +311,7 @@ Agent 正在回复，关闭面板后仍会继续。	Agent is replying; closing t
     return result === undefined ? value : value.slice(0, value.indexOf(text)) + result + value.slice(value.indexOf(text) + text.length);
   }
   // Exclude all user-authored content, source paths, result bodies and logs.
-  const protectedContent = '[data-agent-name],[data-agent-option],#agent-status,#chat-room-members label,#group-chat-help,#project-nav,#project-title,#chat-project-name,#context-project-title,.card-title,.card-description,.card-error,.detail-desc,#drawer-body>h2,.chat-session>strong,.chat-message>div:not(.chat-message-label),.result-box,textarea,input,pre,code,figcaption,.tag-list,.decision-panel p,.decision-options,#task-project option,#chat-task option:not([value=""])';
+  const protectedContent = '[data-chat-user-value],[data-trash-user-value],[data-model-value], [data-agent-name],[data-agent-option],#agent-status,#chat-room-members label,#group-chat-help,#project-nav,#project-title,#chat-project-name,#context-project-title,.card-title,.card-description,.card-error,.detail-desc,#drawer-body>h2,.chat-session>strong,.chat-message>div:not(.chat-message-label),.result-box,textarea,input,pre,code,figcaption,.tag-list,.decision-panel p,.decision-options,#task-project option,#chat-task option:not([value=""]),#mission-project option,.mission-card-title h4,.mission-card-goal,.mission-detail-head h2,.mission-goal-block>p,.mission-plan,.delivery-receipt p,.review-finding p';
   const textSources = new WeakMap(), attributeSources = new WeakMap();
   function localizeText(node) {
     if (!node.parentElement || node.parentElement.closest(`script,style,${protectedContent}`)) return;
