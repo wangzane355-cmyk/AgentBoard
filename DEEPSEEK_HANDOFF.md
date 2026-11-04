@@ -47,7 +47,7 @@ Never expand a directed message into unsolicited calls to other agents.
 
 ## Chat scope and project links — locally implemented and verified
 
-This source update passed 176 offline tests locally on Windows. Desktop and 390px UI checks covered task/project deletion and restoration, free discussion using a clearly labeled local simulator, scope drafts, project creation/linking, deleted-scope fallback and English labels. No real model was invoked for those UI checks. An idle-only service restart preserved existing project and task records. Keep detailed run evidence private under data/.
+This source update passed 178 offline tests locally on Windows. Desktop and 390px UI checks covered task/project deletion and restoration, free discussion using a clearly labeled local simulator, scope drafts, project creation/linking, deleted-scope fallback and English labels. No real model was invoked for those UI checks. An idle-only service restart preserved existing project and task records. Keep detailed run evidence private under data/.
 
 - The sidebar Agent chat entry opens free discussion with Codex selected. POST `/api/chats` accepts `project_id: null`; free discussion has no project references, source snapshot or task creation. The main planning entry and task discussion entry retain their project/task context.
 - The permanent chat scope selector opens that scope's history and a new conversation, preserving unsent drafts when switching within the page. It does not reassign an existing conversation or stop a background reply.

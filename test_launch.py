@@ -41,12 +41,12 @@ class LauncherTests(unittest.TestCase):
         with patch.dict(launch.os.environ, {"AGENTBOARD_DATA_DIR": str(self.data)}), patch.object(launch.sys, "stdout", None), patch.object(launch.sys, "stderr", None):
             launch.prepare_windowless_logging()
             output, error = launch.sys.stdout, launch.sys.stderr
-            output.write("windowless startup fixture\n")
-            error.write("windowless diagnostics fixture\n")
+            output.write("windowless startup fixture：启动中\n")
+            error.write("windowless diagnostics fixture：中文错误\n")
             output.flush()
         output.close()
         self.assertIs(output, error)
-        self.assertIn("windowless diagnostics fixture", (self.data / "launcher.log").read_text(encoding="utf-8"))
+        self.assertIn("windowless diagnostics fixture：中文错误", (self.data / "launcher.log").read_text(encoding="utf-8"))
 
     def test_ready_requires_health_identity_and_actual_page(self):
         health = response(json.dumps({"app": "AgentBoard", "ready": True}).encode())
@@ -170,6 +170,55 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual(launch.main(), 0)
         error.assert_not_called()
         browser.assert_not_called()
+
+    def test_main_legacy_console_encoding_never_blocks_lifecycle_or_native_errors(self):
+        cases = [
+            ("success", None, True, 0, True, None),
+            ("cancelled", launch.LaunchCancelled(), True, 0, False, None),
+            ("startup_error", launch.StartupError("中文启动失败"), True, 1, False, "中文启动失败"),
+            ("browser_error", None, False, 1, True, "后台已经就绪"),
+            ("unexpected_error", RuntimeError("中文意外异常"), True, 1, False, "中文意外异常"),
+        ]
+        for name, failure, browser_ready, expected, opens_browser, error_text in cases:
+            with self.subTest(case=name):
+                output_bytes, error_bytes = io.BytesIO(), io.BytesIO()
+                output = io.TextIOWrapper(output_bytes, encoding="cp1252", errors="strict")
+                error = io.TextIOWrapper(error_bytes, encoding="cp1252", errors="strict")
+                try:
+                    # Force a strict English-Windows code page even when the test
+                    # runner is UTF-8. Mock only the native window, not show_error.
+                    with patch.object(launch.sys, "stdout", output), patch.object(launch.sys, "stderr", error), patch.object(launch, "StartupProgress") as progress, patch.object(launch, "ensure_running", side_effect=failure) as ensure, patch.object(launch.webbrowser, "open", return_value=browser_ready) as browser, patch.object(launch, "data_directory", return_value=self.data), patch.object(launch.os, "name", "nt"), patch("ctypes.windll", create=True) as windows:
+                        self.assertEqual(launch.main(), expected)
+                    ensure.assert_called_once()
+                    self.assertEqual(browser.called, opens_browser)
+                    self.assertTrue(progress.return_value.close.called)
+                    output.flush()
+                    error.flush()
+                    console = output_bytes.getvalue().decode("cp1252")
+                    diagnostics = error_bytes.getvalue().decode("cp1252")
+                    self.assertIn("AgentBoard", console)
+                    self.assertNotIn("UnicodeEncodeError", diagnostics)
+                    if error_text:
+                        windows.user32.MessageBoxW.assert_called_once()
+                        self.assertIn(error_text, windows.user32.MessageBoxW.call_args.args[1])
+                        self.assertIn("http://127.0.0.1:8765/", diagnostics)
+                    else:
+                        windows.user32.MessageBoxW.assert_not_called()
+                    if name == "unexpected_error":
+                        self.assertIn("Traceback", diagnostics)
+                        self.assertIn("RuntimeError", diagnostics)
+                finally:
+                    output.close()
+                    error.close()
+
+    def test_main_preserves_unicode_on_stringio_without_reconfigure(self):
+        output, error = io.StringIO(), io.StringIO()
+        with patch.object(launch.sys, "stdout", output), patch.object(launch.sys, "stderr", error), patch.object(launch, "StartupProgress"), patch.object(launch, "ensure_running") as ensure, patch.object(launch.webbrowser, "open", return_value=True):
+            self.assertEqual(launch.main(), 0)
+        ensure.assert_called_once()
+        self.assertIn("正在打开 AgentBoard", output.getvalue())
+        self.assertIn("AgentBoard 已就绪，已打开页面。", output.getvalue())
+        self.assertEqual(error.getvalue(), "")
 
     def test_progress_cancel_closes_only_its_own_window(self):
         progress = launch.StartupProgress()

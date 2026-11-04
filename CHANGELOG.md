@@ -3,11 +3,13 @@
 
 ## 0.4.0 — 2026-11-03 (source update)
 
-- Validate chat scopes and recoverable cleanup with 176 offline tests on Windows, plus desktop/390px UI checks using a local simulator. An idle-only service restart preserved existing project and task records.
+- Validate chat scopes and recoverable cleanup with 178 offline tests on Windows, plus desktop/390px UI checks using a local simulator. An idle-only service restart preserved existing project and task records.
 
 - Add project-free discussion with Codex selected, a permanent chat scope selector and draft preservation across scope/conversation switches. Scope navigation does not silently move an existing conversation.
 - Add explicit idle-conversation project linking and project creation inside chat, including opt-in folder creation. Preserve history, clear the earlier task link and invalidate stale consensus/context when moving discussions. Background replies continue when viewing another scope.
 - Add recoverable task/project deletion, recycle-bin restoration and a short undo action. Project deletion hides its associated visible work without deleting source folders, historical results or integrated changes. Active work/dependencies block deletion; restoration does not start tasks.
+
+- Keep startup, cancellation and native error feedback working when a legacy Windows console cannot encode Chinese text. Preserve full Unicode in UTF-8 logs and native dialogs; add strict CP1252 lifecycle coverage. Normalize Windows temporary-folder aliases in workspace tests.
 
 - Harden desktop startup with a cross-process startup lock, detached background process, actual health/page readiness, bounded slow-start waiting, visible progress/errors and fixed interpreter/working-directory selection.
 

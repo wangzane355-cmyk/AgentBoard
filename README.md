@@ -18,7 +18,7 @@ AgentBoard keeps the work moving after the first model response. A durable Pytho
 
 ## New in 0.4 — autonomous delivery
 
-This source update includes project-free discussion and recoverable task/project deletion. All 176 offline tests passed locally on Windows. Desktop/mobile UI checks covered free discussion with a local simulator, project creation/linking, deletion/restoration and draft preservation.
+This source update includes project-free discussion and recoverable task/project deletion. All 178 offline tests passed locally on Windows. Desktop/mobile UI checks covered free discussion with a local simulator, project creation/linking, deletion/restoration and draft preservation.
 
 - **Start with an idea.** Agent chat opens in free discussion with Codex selected. No project folder is required, and project references/source snapshots are not attached. A permanent scope selector also opens conversations for an existing project while preserving unsent drafts when switching.
 - **Choose the project when ready.** Explicitly link an idle conversation to an existing project, or create a project from the discussion and keep its history. New folders require an explicit checkbox; project creation does not start a model or task. Active replies continue in the background when you switch conversations.

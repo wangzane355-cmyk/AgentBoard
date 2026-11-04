@@ -44,6 +44,22 @@ def prepare_windowless_logging() -> None:
         sys.stderr = log
 
 
+def console_message(message: str, *, stream=None) -> None:
+    """Keep optional console output from breaking startup on legacy code pages."""
+    stream = sys.stdout if stream is None else stream
+    if stream is None:
+        return
+    try:
+        print(message, file=stream, flush=True)
+    except UnicodeEncodeError:
+        # Do not reconfigure caller-owned streams (including StringIO). Preserve
+        # full Unicode in the UTF-8 private log and native error dialog; only the
+        # legacy console needs escaped characters it can actually encode.
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        printable = message.encode(encoding, errors="backslashreplace").decode(encoding)
+        print(printable, file=stream, flush=True)
+
+
 def page_ready(port: int = 8765) -> bool:
     try:
         with urlopen(f"http://127.0.0.1:{port}/api/health", timeout=0.5) as response:
@@ -208,7 +224,7 @@ class StartupProgress:
 
 def show_error(message):
     text = f"{message}\n\n网页入口：http://127.0.0.1:8765/\n启动日志：{data_directory() / 'launcher.log'}"
-    print(text, file=sys.stderr, flush=True)
+    console_message(text, stream=sys.stderr)
     if os.name == "nt":
         import ctypes
         ctypes.windll.user32.MessageBoxW(None, text, "AgentBoard · 启动提示", 0x10)
@@ -218,21 +234,21 @@ def main():
     progress = StartupProgress()
     try:
         prepare_windowless_logging()
-        print(f"\n[{datetime.now().astimezone().isoformat(timespec='seconds')}] 正在打开 AgentBoard", flush=True)
+        console_message(f"\n[{datetime.now().astimezone().isoformat(timespec='seconds')}] 正在打开 AgentBoard")
         ensure_running(progress=progress.update)
         progress.close()
         url = "http://127.0.0.1:8765/"
         if not webbrowser.open(url):
             raise StartupError("后台已经就绪，但系统未能打开浏览器。请手动打开下面的网页入口。")
-        print("AgentBoard 已就绪，已打开页面。", flush=True)
+        console_message("AgentBoard 已就绪，已打开页面。")
         return 0
     except LaunchCancelled:
-        print("已取消本次打开；已有后台和任务继续运行。", flush=True)
+        console_message("已取消本次打开；已有后台和任务继续运行。")
         return 0
     except Exception as exc:
         progress.close()
         if not isinstance(exc, StartupError):
-            traceback.print_exc()
+            console_message(traceback.format_exc().rstrip(), stream=sys.stderr)
         show_error(str(exc))
         return 1
     finally:

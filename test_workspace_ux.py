@@ -220,7 +220,7 @@ class WorkspaceUXTests(unittest.TestCase):
         self.assertFalse(target.exists())
         project = self.board.create_project({"name": "New", "path": str(target), "create_directory": True})
         self.assertTrue(target.is_dir())
-        self.assertEqual(Path(project["path"]), target)
+        self.assertEqual(Path(project["path"]), target.resolve())
         marker = target / "keep.txt"
         marker.write_text("keep", encoding="utf-8")
         count = len(self.board.STATE["projects"])
