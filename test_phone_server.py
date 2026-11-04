@@ -107,7 +107,8 @@ class PhoneServerTests(unittest.TestCase):
         project = response["data"]
         self.assertIn(project, self.board.STATE["projects"])
         self.assertTrue(Path(project["path"]).is_dir())
-        self.assertTrue(Path(project["path"]).is_relative_to(self.board.MANAGED_PROJECTS))
+        # Windows runners may spell the temporary root with an 8.3 alias.
+        self.assertTrue(Path(project["path"]).resolve().is_relative_to(self.board.MANAGED_PROJECTS.resolve()))
         code, response, _ = self.request(status["port"], "POST", "/api/chats",
             {"project_id": project["id"], "agent": "codex"}, cookie, status["origin"])
         self.assertEqual(code, 200, response)

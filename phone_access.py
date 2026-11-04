@@ -118,6 +118,11 @@ class _LANServer(ThreadingHTTPServer):
     allow_reuse_address = False
 
     def server_bind(self):
+        # POSIX must opt in before bind so a closed listener can immediately
+        # recover its saved port while prior connections are in TIME_WAIT.
+        # Windows instead needs exclusive ownership; SO_REUSEADDR there could
+        # let a second process bind the same endpoint.
+        self.allow_reuse_address = os.name != "nt"
         if os.name == "nt" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
         super().server_bind()

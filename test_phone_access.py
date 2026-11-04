@@ -124,6 +124,40 @@ class PhoneAccessTests(unittest.TestCase):
         self.assertFalse(production.status()["running"])
         self.assertFalse(production.path.exists())
 
+    def test_bind_applies_platform_socket_ownership_before_parent_bind(self):
+        for platform in ("posix", "nt"):
+            with self.subTest(platform=platform):
+                server = object.__new__(phone._LANServer)
+                server.socket = Mock()
+                observed = []
+
+                def parent_bind():
+                    observed.append((server.allow_reuse_address, list(server.socket.mock_calls)))
+
+                with patch("phone_access.os.name", platform), \
+                        patch.object(phone.socket, "SO_EXCLUSIVEADDRUSE", 12345, create=True), \
+                        patch.object(phone.ThreadingHTTPServer, "server_bind", side_effect=parent_bind):
+                    server.server_bind()
+
+                self.assertEqual(len(observed), 1)
+                reuse, socket_calls = observed[0]
+                self.assertEqual(reuse, platform == "posix")
+                if platform == "nt":
+                    server.socket.setsockopt.assert_called_once_with(socket.SOL_SOCKET, 12345, 1)
+                    self.assertEqual(len(socket_calls), 1)
+                else:
+                    server.socket.setsockopt.assert_not_called()
+                    self.assertEqual(socket_calls, [])
+
+    def test_second_gateway_cannot_take_an_active_listener_port(self):
+        self.start()
+        cookie, _ = self.pair()
+        contender = self.manager()
+        with self.assertRaises(ValueError):
+            contender.enable("127.0.0.1", self.port)
+        self.assertFalse(contender.status()["running"])
+        self.assertEqual(self.request("/api/state", cookie=cookie)[0], 200)
+
     def test_enable_uses_one_listener_and_rejects_invalid_ports(self):
         for port in [True, -1, 1, 65536, "8767"]:
             with self.subTest(port=port), self.assertRaises(ValueError):
